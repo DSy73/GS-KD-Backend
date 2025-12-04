@@ -736,8 +736,10 @@ export default function ClinicAppointmentSystem() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
       {/* HEADER */}
-      <div className="bg-[#fff5f7] border-b shadow-sm">
+            {/* HEADER */}
+            <div className="bg-[#fff5f7] border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between h-[120px]">
+          {/* Sol taraf: Logo + Ünvan */}
           <div className="flex items-center gap-3">
             <img
               src={logoGulnaz}
@@ -759,40 +761,46 @@ export default function ClinicAppointmentSystem() {
             </div>
           </div>
 
-          <div className="flex flex-col items-end justify-center h-full">
-            <div className="text-[24px] font-medium text-[#d14b84] mb-1">
-              Randevu Yönetim Sistemi
-            </div>
-
-            <div className="flex gap-2 mt-2 -mb-4">
-              <div className="bg-gradient-to-br from-pink-500 to-pink-600 text-white px-3 py-1.5 rounded-lg shadow text-center">
-                <div className="text-[10px] opacity-90 leading-none">Bugün</div>
-                <div className="text-xl font-bold leading-none">
-                  {stats.today}
-                </div>
+          {/* Sağ taraf: istatistik kutuları + Çıkış */}
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col items-end justify-center h-full">
+              <div className="text-[24px] font-medium text-[#d14b84] mb-1">
+                Randevu Yönetim Sistemi
               </div>
 
-              <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white px-3 py-1.5 rounded-lg shadow text-center">
-                <div className="text-[10px] opacity-90 leading-none">
-                  Bu Hafta
+              <div className="flex gap-2 mt-2 -mb-4">
+                <div className="bg-gradient-to-br from-pink-500 to-pink-600 text-white px-3 py-1.5 rounded-lg shadow text-center">
+                  <div className="text-[10px] opacity-90 leading-none">Bugün</div>
+                  <div className="text-xl font-bold leading-none">{stats.today}</div>
                 </div>
-                <div className="text-xl font-bold leading-none">
-                  {stats.week}
-                </div>
-              </div>
 
-              <div className="bg-gradient-to-br from-green-500 to-green-600 text-white px-3 py-1.5 rounded-lg shadow text-center">
-                <div className="text-[10px] opacity-90 leading-none">
-                  Tamamlanan
+                <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white px-3 py-1.5 rounded-lg shadow text-center">
+                  <div className="text-[10px] opacity-90 leading-none">Bu Hafta</div>
+                  <div className="text-xl font-bold leading-none">{stats.week}</div>
                 </div>
-                <div className="text-xl font-bold leading-none">
-                  {stats.completed}
+
+                <div className="bg-gradient-to-br from-green-500 to-green-600 text-white px-3 py-1.5 rounded-lg shadow text-center">
+                  <div className="text-[10px] opacity-90 leading-none">Tamamlanan</div>
+                  <div className="text-xl font-bold leading-none">{stats.completed}</div>
                 </div>
               </div>
             </div>
+
+            {/* Çıkış butonu */}
+            <button
+              onClick={async () => {
+                await supabase.auth.signOut();
+                setUser(null);
+                setUserRole(null);
+              }}
+              className="px-5 py-2.5 bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-xl hover:from-gray-600 hover:to-gray-700 font-medium shadow-lg transition-all"
+            >
+              Çıkış
+            </button>
           </div>
         </div>
       </div>
+  
 
       {/* Controls + Views */}
       <div className="max-w-7xl mx-auto px-6 py-6">
