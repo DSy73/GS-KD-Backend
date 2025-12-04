@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import Login from "./Login";
+import Login from './Login';
 import {
   Plus,
   Calendar,
@@ -16,11 +16,8 @@ import {
   AlertCircle,
   CheckCircle,
   User,
-  Activity,
-  Heart,
 } from 'lucide-react';
 import logoGulnaz from './assets/GS-KD-Logo.png';
-
 
 /* -------------------------------- Helpers -------------------------------- */
 
@@ -42,10 +39,151 @@ const normalizeTime = (t) => {
   return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
 };
 
+/* --------------------------- Status Config & Risk -------------------------- */
+
+const STATUS_OPTIONS = [
+  { value: 'planned', label: 'Beklemede' },
+  { value: 'completed', label: 'Tamamlandı' },
+  { value: 'no_show', label: 'Gelmedi' },
+  { value: 'cancelled', label: 'İptal' },
+];
+
+const STATUS_CONFIG = {
+  planned: {
+    label: 'Beklemede',
+    badgeClass: 'bg-yellow-100 text-yellow-800',
+    dotClass: 'bg-yellow-400',
+  },
+  completed: {
+    label: 'Tamamlandı',
+    badgeClass: 'bg-green-100 text-green-800',
+    dotClass: 'bg-green-400',
+  },
+  no_show: {
+    label: 'Gelmedi',
+    badgeClass: 'bg-red-100 text-red-800',
+    dotClass: 'bg-red-400',
+  },
+  cancelled: {
+    label: 'İptal',
+    badgeClass: 'bg-gray-100 text-gray-600',
+    dotClass: 'bg-gray-400',
+  },
+};
+
+const STATUS_LABELS = {
+  planned: 'Beklemede',
+  completed: 'Tamamlandı',
+  no_show: 'Gelmedi',
+  cancelled: 'İptal',
+};
+
+function calculateRiskFromHistory(history = [], patient) {
+  const records = Array.isArray(history) ? history : [];
+  const today = new Date();
+  let score = records.length === 0 ? 10 : 20;
+
+  if (records.length > 0) {
+    const sorted = [...records].sort(
+      (a, b) => new Date(a.date) - new Date(b.date)
+    );
+    const last = sorted[sorted.length - 1];
+    const lastDate = new Date(last.date);
+    const daysSinceLast =
+      (today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24);
+
+    if (daysSinceLast > 365) score += 40;
+    else if (daysSinceLast > 180) score += 25;
+    else if (daysSinceLast > 90) score += 10;
+
+    const noShows = records.filter((a) => a.status === 'no_show').length;
+    score += noShows * 15;
+
+    const completed = records.filter((a) => a.status === 'completed').length;
+    if (completed >= 5) score -= 10;
+  }
+
+  const hasOperation = records.some((a) =>
+    a.type?.toLowerCase().includes('operasyon')
+  );
+  if (hasOperation) score += 15;
+
+  const flaggedNotes = records.some((a) =>
+    a.notes?.toLowerCase().includes('yüksek risk')
+  );
+  if (flaggedNotes) score += 10;
+
+  if (records.length >= 5) score += 5;
+
+  if (patient?.age && patient.age >= 40) score += 5;
+
+  score = Math.max(0, Math.min(100, score));
+
+  let level;
+  if (score >= 70) level = 'Yüksek';
+  else if (score >= 40) level = 'Orta';
+  else level = 'Düşük';
+
+  return { score, level };
+}
+
+function getRiskBadgeClasses(level) {
+  if (level === 'Yüksek') {
+    return 'bg-red-50 text-red-700 border-red-200';
+  }
+  if (level === 'Orta') {
+    return 'bg-amber-50 text-amber-700 border-amber-200';
+  }
+  return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+}
+
+function RiskBadge({ history, patient }) {
+  const { score, level } = calculateRiskFromHistory(history || [], patient);
+  const badgeClass = getRiskBadgeClasses(level);
+
+  return (
+    <div
+      className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-medium ${badgeClass}`}
+    >
+      <span>Risk: {level}</span>
+      <span className="text-[10px] opacity-70">({score}/100)</span>
+    </div>
+  );
+}
+
+function getStatusColorClasses(status) {
+  switch (status) {
+    case 'completed':
+      return 'bg-green-50 border-green-200';
+    case 'no_show':
+      return 'bg-red-50 border-red-200';
+    case 'cancelled':
+      return 'bg-gray-100 border-gray-300';
+    case 'planned':
+    default:
+      return 'bg-yellow-50 border-yellow-200';
+  }
+}
+
+function getStatusBadgeClass(status) {
+  switch (status) {
+    case 'completed':
+      return 'bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-[10px] font-semibold';
+    case 'no_show':
+      return 'bg-red-100 text-red-800 px-2 py-0.5 rounded-full text-[10px] font-semibold';
+    case 'cancelled':
+      return 'bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] font-semibold';
+    case 'planned':
+    default:
+      return 'bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full text-[10px] font-semibold';
+  }
+}
+
 /* ---------------------------- Main Component ------------------------------ */
 
 export default function ClinicAppointmentSystem() {
   const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(null); // 'doctor' veya 'assistant'
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState('day');
@@ -74,7 +212,7 @@ export default function ClinicAppointmentSystem() {
     phone: '',
     email: '',
     dateOfBirth: '',
-    notes: ''
+    notes: '',
   });
 
   const [suggestedSlot, setSuggestedSlot] = useState(null);
@@ -112,7 +250,7 @@ export default function ClinicAppointmentSystem() {
       value: 'İlk Muayene',
       color: 'bg-green-50 border-green-400 hover:bg-green-100',
       duration: 45,
-      icon: '🏥',
+      icon: '🥼',
     },
     {
       value: 'Acil',
@@ -122,23 +260,48 @@ export default function ClinicAppointmentSystem() {
     },
   ];
 
+  // Kullanıcı rolünü kontrol et
+  const checkUserRole = async (email) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('role')
+        .eq('email', email)
+        .single();
+
+      if (error) {
+        console.error('Rol kontrolü hatası:', error);
+        setUserRole('assistant');
+        return;
+      }
+
+      setUserRole(data?.role || 'assistant');
+    } catch (error) {
+      console.error('Rol kontrolü hatası:', error);
+      setUserRole('assistant');
+    }
+  };
+
   useEffect(() => {
-    // Sayfa yüklendiğinde oturum kontrolü
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      if (session?.user) {
+        checkUserRole(session.user.email);
+      }
       setCheckingAuth(false);
     });
-  
-    // Oturum değişikliklerini dinle
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      if (session?.user) {
+        checkUserRole(session.user.email);
+      }
     });
-  
+
     return () => subscription.unsubscribe();
   }, []);
-  
 
   const fetchAppointments = async () => {
     try {
@@ -158,32 +321,30 @@ export default function ClinicAppointmentSystem() {
       setLoading(false);
     }
   };
+
   const fetchPatients = async () => {
     try {
       const { data, error } = await supabase
         .from('patients')
         .select('*')
         .order('name', { ascending: true });
-  
+
       if (error) throw error;
-      setPatients(data || []); // ✅ setPatientList DEĞİL, setPatients
+      setPatients(data || []);
     } catch (error) {
       console.error('Hastalar yüklenirken hata:', error);
       alert('Hastalar yüklenemedi: ' + error.message);
     }
   };
-    // Kullanıcı giriş yaptıktan sonra verileri yükle
-    useEffect(() => {
-      if (!user) return;        // henüz login değilken çalışmasın
-  
-      (async () => {
-        await Promise.all([
-          fetchAppointments(),
-          fetchPatients(),
-        ]);
-      })();
-    }, [user]);
-  
+
+  useEffect(() => {
+    if (!user) return;
+
+    (async () => {
+      await Promise.all([fetchAppointments(), fetchPatients()]);
+    })();
+  }, [user]);
+
   const formatDate = (date) => {
     return date.toLocaleDateString('tr-TR', {
       weekday: 'long',
@@ -197,16 +358,16 @@ export default function ClinicAppointmentSystem() {
     const newDate = new Date(currentDate);
     newDate.setDate(newDate.getDate() + days);
     setCurrentDate(newDate);
-  };  
+  };
 
   const getWeekDates = () => {
     const week = [];
     const start = new Date(currentDate);
-    const day = start.getDay(); // 0: Pazar
-    const diff = day === 0 ? -6 : 1 - day; // Haftayı Pazartesi başlat
+    const day = start.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
     start.setDate(start.getDate() + diff);
 
-    for (let i = 0; i < 7; i++) {     // 5 yerine 7
+    for (let i = 0; i < 7; i++) {
       const date = new Date(start);
       date.setDate(date.getDate() + i);
       week.push(date);
@@ -228,19 +389,16 @@ export default function ClinicAppointmentSystem() {
     );
   };
 
-  // ⭐ YENİ: Hasta için en iyi saat önerisi
   const suggestBestSlotForPatient = (patientName) => {
     if (!patientName) {
       setSuggestedSlot(null);
       return;
     }
 
-    // 1) Bu hastanın geçmiş randevuları
     const history = appointments.filter(
       (apt) => apt.patient_name === patientName
     );
 
-    // 2) Ortalama süre
     const durations = history
       .map((h) => h.duration)
       .filter((d) => typeof d === 'number' && !Number.isNaN(d));
@@ -251,7 +409,6 @@ export default function ClinicAppointmentSystem() {
         )
       : 30;
 
-    // 3) Hangi gün için öneri yapıyoruz? Şimdilik bugün
     const targetDate = new Date();
     const dateStr = getDateString(targetDate);
 
@@ -259,7 +416,6 @@ export default function ClinicAppointmentSystem() {
       (apt) => getDateString(apt.date) === dateStr
     );
 
-    // 4) Bugün boş olan saatler
     const freeSlots = workingHours.filter(
       (time) =>
         !todaysAppointments.some(
@@ -272,14 +428,14 @@ export default function ClinicAppointmentSystem() {
       return;
     }
 
-    // 5) Sabah / öğleden sonra tercihi
     const morningCount = history.filter((h) => {
       if (!h.time) return false;
       const hour = parseInt(h.time.toString().split(':')[0] || '0', 10);
       return hour < 13;
     }).length;
 
-    const preferMorning = history.length > 0 && morningCount > history.length / 2;
+    const preferMorning =
+      history.length > 0 && morningCount > history.length / 2;
 
     let candidateSlots = freeSlots;
     if (preferMorning) {
@@ -302,47 +458,18 @@ export default function ClinicAppointmentSystem() {
     });
   };
 
-  const STATUS_OPTIONS = [
-    { value: 'planned',   label: 'Beklemede' },
-    { value: 'completed', label: 'Tamamlandı' },
-    { value: 'no_show',   label: 'Gelmedi' },
-    { value: 'cancelled', label: 'İptal' },
-  ];
-
-  const STATUS_CONFIG = {
-    planned: {
-      label: 'Beklemede',
-      badgeClass: 'bg-yellow-100 text-yellow-800',
-      dotClass: 'bg-yellow-400',
-    },
-    completed: {
-      label: 'Tamamlandı',
-      badgeClass: 'bg-green-100 text-green-800',
-      dotClass: 'bg-green-400',
-    },
-    no_show: {
-      label: 'Gelmedi',
-      badgeClass: 'bg-red-100 text-red-800',
-      dotClass: 'bg-red-400',
-    },
-    cancelled: {
-      label: 'İptal',
-      badgeClass: 'bg-gray-100 text-gray-600',
-      dotClass: 'bg-gray-400',
-    },
-  };
   const updateAppointmentStatus = async (id, status) => {
     try {
       const { error } = await supabase
         .from('appointments')
         .update({
           status,
-          completed: status === 'completed', // eski completed alanı da uyumlu kalsın
+          completed: status === 'completed',
         })
         .eq('id', id);
-  
+
       if (error) throw error;
-  
+
       setAppointments((prev) =>
         prev.map((apt) =>
           apt.id === id ? { ...apt, status, completed: status === 'completed' } : apt
@@ -353,40 +480,40 @@ export default function ClinicAppointmentSystem() {
       alert('Durum güncellenemedi: ' + error.message);
     }
   };
-  
+
   const getStatusConfig = (status) =>
     STATUS_CONFIG[status] || STATUS_CONFIG.planned;
-  
+
   const handleSavePatient = async () => {
     if (!patientForm.name) return;
-  
+
     try {
       setPatientFormLoading(true);
-  
+
       const payload = {
         name: patientForm.name,
         phone: patientForm.phone || null,
         email: patientForm.email || null,
         date_of_birth: patientForm.dateOfBirth || null,
-        notes: patientForm.notes || null
+        notes: patientForm.notes || null,
       };
-  
+
       const { data, error } = await supabase
         .from('patients')
         .insert([payload])
         .select()
         .single();
-  
+
       if (error) throw error;
-  
-      setPatients(prev => [...prev, data]); // ✅ setPatientList DEĞİL
+
+      setPatients((prev) => [...prev, data]);
       setShowPatientForm(false);
       setPatientForm({
         name: '',
         phone: '',
         email: '',
         dateOfBirth: '',
-        notes: ''
+        notes: '',
       });
     } catch (error) {
       console.error('Hasta kaydedilirken hata:', error);
@@ -395,6 +522,7 @@ export default function ClinicAppointmentSystem() {
       setPatientFormLoading(false);
     }
   };
+
   const handleSelectPatient = (patient) => {
     setNewAppointment((prev) => ({
       ...prev,
@@ -402,19 +530,17 @@ export default function ClinicAppointmentSystem() {
       phone: patient.phone || prev.phone,
     }));
     suggestBestSlotForPatient(patient.name);
-    setShowPatientSuggestions(false); // ✅ seçimden sonra dropdown kapanır
+    setShowPatientSuggestions(false);
   };
 
-  
   const handleAddAppointment = async () => {
     if (!newAppointment.patientName || !selectedSlot) return;
-  
-    // Ek güvenlik: son anda dolmuşsa engelle
+
     if (!isSlotAvailable(selectedSlot.time, selectedSlot.date)) {
       alert('Bu tarih ve saatte zaten bir randevu var.');
       return;
     }
-  
+
     try {
       const appointmentData = {
         date: getDateString(selectedSlot.date),
@@ -427,23 +553,21 @@ export default function ClinicAppointmentSystem() {
         completed: false,
         status: 'planned',
       };
-  
+
       const { data, error } = await supabase
         .from('appointments')
         .insert([appointmentData])
         .select();
-  
+
       if (error) throw error;
-  
+
       const insertedAppointment = data[0];
-  
-      // 🔹 1) Bu isimde daha önce hasta var mı?
+
       const trimmedName = newAppointment.patientName.trim();
       const existingPatient = patients.find(
         (p) => p.name.toLowerCase() === trimmedName.toLowerCase()
       );
-  
-      // 🔹 2) Yoksa patients tablosuna yeni kayıt aç
+
       if (!existingPatient) {
         try {
           const { data: patientData, error: patientError } = await supabase
@@ -452,21 +576,17 @@ export default function ClinicAppointmentSystem() {
               {
                 name: trimmedName,
                 phone: newAppointment.phone || null,
-                email: null, // ✅ Eğer patients tablonda email varsa
-                date_of_birth: null, // ✅ Eğer patients tablonda date_of_birth varsa
-                notes: null, // ✅ Eğer patients tablonda notes varsa
-                // ❌ lastVisit, totalVisits, upcomingAppointments gibi alanları GÖNDERMEYİN
-                // Bunlar hesaplanıyor, tabloda değil
+                email: null,
+                date_of_birth: null,
+                notes: null,
               },
             ])
             .select();
-  
+
           if (patientError) {
             console.error('Hasta oluşturulurken hata:', patientError);
-            // Hata varsa detayını görelim
             alert('Hasta kaydı oluşturulamadı: ' + patientError.message);
           } else if (patientData && patientData[0]) {
-            // local state'e de ekle
             setPatients((prev) => [...prev, patientData[0]]);
             console.log('✅ Yeni hasta oluşturuldu:', patientData[0]);
           }
@@ -475,11 +595,9 @@ export default function ClinicAppointmentSystem() {
           alert('Hasta kaydı oluşturulamadı: ' + e.message);
         }
       }
-  
-      // 🔹 3) Randevu state'ini güncelle
+
       setAppointments((prev) => [...prev, insertedAppointment]);
-  
-      // Formu sıfırla
+
       setShowAddModal(false);
       setNewAppointment({
         patientName: '',
@@ -489,22 +607,20 @@ export default function ClinicAppointmentSystem() {
         notes: '',
       });
       setSelectedSlot(null);
-      
-      alert('Randevu başarıyla eklendi!'); // ✅ Başarı mesajı
+
+      alert('Randevu başarıyla eklendi!');
     } catch (error) {
       console.error('Randevu eklenirken hata:', error);
       alert('Randevu eklenemedi: ' + error.message);
     }
   };
-  
 
   const openAddModal = (time, date) => {
     if (!isSlotAvailable(time, date)) return;
     setSelectedSlot({ time, date });
-    setSuggestedSlot(null);        // ⭐ önceki öneriyi temizle
+    setSuggestedSlot(null);
     setShowAddModal(true);
   };
-
 
   const getTypeColor = (type) => {
     return (
@@ -521,7 +637,6 @@ export default function ClinicAppointmentSystem() {
     setSelectedPatient(patientName);
     setShowPatientHistory(true);
   };
-  
 
   const getPatientHistory = (patientName) => {
     return appointments
@@ -531,22 +646,22 @@ export default function ClinicAppointmentSystem() {
 
   const getPatientsWithStats = () => {
     const today = new Date();
-  
-    const enriched = patients.map((p) => { // ✅ patientList DEĞİL, patients
+
+    const enriched = patients.map((p) => {
       const history = appointments.filter(
         (apt) => apt.patient_name === p.name
       );
-  
+
       const lastVisit = history.length
         ? history
             .map((apt) => apt.date)
             .sort((a, b) => new Date(b) - new Date(a))[0]
         : null;
-  
+
       const upcomingAppointments = history.filter(
         (apt) => !apt.completed && new Date(apt.date) >= today
       ).length;
-  
+
       return {
         id: p.id,
         name: p.name,
@@ -554,10 +669,10 @@ export default function ClinicAppointmentSystem() {
         email: p.email,
         lastVisit,
         totalVisits: history.length,
-        upcomingAppointments
+        upcomingAppointments,
       };
     });
-  
+
     return enriched.sort((a, b) => {
       if (!a.lastVisit && !b.lastVisit) return a.name.localeCompare(b.name);
       if (!a.lastVisit) return 1;
@@ -565,23 +680,23 @@ export default function ClinicAppointmentSystem() {
       return new Date(b.lastVisit) - new Date(a.lastVisit);
     });
   };
-  
 
   const stats = {
     today: getTodayAppointments(currentDate).length || 0,
     week:
-      appointments.filter(apt => {
+      appointments.filter((apt) => {
         const weekDates = getWeekDates();
-        return weekDates.some(d => getDateString(d) === apt.date);
+        return weekDates.some((d) => getDateString(d) === apt.date);
       }).length || 0,
-    totalPatients: patients.length, // ✅ patientList DEĞİL
-    completed: appointments.filter(apt => apt.status === 'completed').length || 0,
+    totalPatients: patients.length,
+    completed: appointments.filter((apt) => apt.status === 'completed').length || 0,
   };
+
   const matchingPatients = newAppointment.patientName
-  ? patients.filter((p) =>
-      p.name.toLowerCase().includes(newAppointment.patientName.toLowerCase())
-    )
-  : [];
+    ? patients.filter((p) =>
+        p.name.toLowerCase().includes(newAppointment.patientName.toLowerCase())
+      )
+    : [];
 
   const selectedPatientData = React.useMemo(
     () => patients.find((p) => p.name === selectedPatient) || null,
@@ -595,15 +710,18 @@ export default function ClinicAppointmentSystem() {
       <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-pink-500 border-t-transparent mb-4"></div>
-          <div className="text-2xl font-bold text-gray-800">Kontrol ediliyor...</div>
+          <div className="text-2xl font-bold text-gray-800">
+            Kontrol ediliyor...
+          </div>
         </div>
       </div>
     );
   }
-  
+
   if (!user) {
     return <Login onLoginSuccess={setUser} />;
-  }  
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50 flex items-center justify-center">
@@ -617,59 +735,68 @@ export default function ClinicAppointmentSystem() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
-{/* HEADER – Ultra Compact Premium */}
-<div className="bg-[#fff5f7] border-b shadow-sm">
-  <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between h-[120px]">
-    {/* SOL TARAF — Büyük Logo */}
-    <div className="flex items-center gap-3">
-      <img
-        src={logoGulnaz}
-        className="w-[105px] h-auto object-contain"
-        alt="Doç. Dr. Gülnaz Şahin"
-      />
-      <div className="flex flex-col leading-tight ml-2">
-        <div className="text-[22px] font-semibold text-[#b46b7a]">
-          Doç. Dr. Gülnaz Şahin
-        </div>
-        <div className="text-xs tracking-wide text-[#c697a3] uppercase">
-          Kadın Hastalıkları • Doğum • İnfertilite
+      {/* HEADER */}
+      <div className="bg-[#fff5f7] border-b shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between h-[120px]">
+          <div className="flex items-center gap-3">
+            <img
+              src={logoGulnaz}
+              className="w-[105px] h-auto object-contain"
+              alt="Doç. Dr. Gülnaz Şahin"
+            />
+            <div className="flex flex-col leading-tight ml-2">
+              <div className="text-[22px] font-semibold text-[#b46b7a]">
+                Doç. Dr. Gülnaz Şahin
+              </div>
+              <div className="text-xs tracking-wide text-[#c697a3] uppercase">
+                Kadın Hastalıkları • Doğum • İnfertilite
+              </div>
+              {userRole && (
+                <div className="text-[10px] mt-1 px-2 py-0.5 bg-pink-100 text-pink-700 rounded-full inline-block w-fit">
+                  {userRole === 'doctor' ? '👩‍⚕️ Doktor' : '👤 Asistan'}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col items-end justify-center h-full">
+            <div className="text-[24px] font-medium text-[#d14b84] mb-1">
+              Randevu Yönetim Sistemi
+            </div>
+
+            <div className="flex gap-2 mt-2 -mb-4">
+              <div className="bg-gradient-to-br from-pink-500 to-pink-600 text-white px-3 py-1.5 rounded-lg shadow text-center">
+                <div className="text-[10px] opacity-90 leading-none">Bugün</div>
+                <div className="text-xl font-bold leading-none">
+                  {stats.today}
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white px-3 py-1.5 rounded-lg shadow text-center">
+                <div className="text-[10px] opacity-90 leading-none">
+                  Bu Hafta
+                </div>
+                <div className="text-xl font-bold leading-none">
+                  {stats.week}
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-green-500 to-green-600 text-white px-3 py-1.5 rounded-lg shadow text-center">
+                <div className="text-[10px] opacity-90 leading-none">
+                  Tamamlanan
+                </div>
+                <div className="text-xl font-bold leading-none">
+                  {stats.completed}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
 
-    {/* SAĞ TARAF — Yazı + Mini Kutular */}
-    <div className="flex flex-col items-end justify-center h-full">
-      {/* Yönetim Sistemi Yazısı */}
-      <div className="text-[24px] font-medium text-[#d14b84] mb-1">
-        Randevu Yönetim Sistemi
-      </div>
-
-      {/* Mini Stats */}
-      <div className="flex gap-2 mt-2 -mb-4">
-        <div className="bg-gradient-to-br from-pink-500 to-pink-600 text-white px-3 py-1.5 rounded-lg shadow text-center">
-          <div className="text-[10px] opacity-90 leading-none">Bugün</div>
-          <div className="text-xl font-bold leading-none">{stats.today}</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white px-3 py-1.5 rounded-lg shadow text-center">
-          <div className="text-[10px] opacity-90 leading-none">Bu Hafta</div>
-          <div className="text-xl font-bold leading-none">{stats.week}</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white px-3 py-1.5 rounded-lg shadow text-center">
-          <div className="text-[10px] opacity-90 leading-none">Tamamlanan</div>
-          <div className="text-xl font-bold leading-none">{stats.completed}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-
-      
       {/* Controls + Views */}
       <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="bg-white rounded-2xl shadow-lg p-5 mb-6">
+        <div className="bg-white rounded-2xl shadow-lg p-5 mb-6">
           <div className="flex justify-between items-center">
             <div className="flex gap-2">
               <button
@@ -716,18 +843,18 @@ export default function ClinicAppointmentSystem() {
                   <ChevronLeft className="w-5 h-5" />
                 </button>
                 <div className="text-center min-w-[300px]">
-                 <div className="font-bold text-gray-800 text-lg">
-                   {view === 'day'
+                  <div className="font-bold text-gray-800 text-lg">
+                    {view === 'day'
                       ? formatDate(currentDate)
                       : (() => {
-                          const week = getWeekDates();           // [Pazartesi, ..., Cuma]
+                          const week = getWeekDates();
                           const start = week[0];
                           const end = week[week.length - 1];
 
                           const options = {
-                              day: 'numeric',
-                              month: 'long',
-                              year: 'numeric',
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric',
                           };
 
                           return (
@@ -735,16 +862,16 @@ export default function ClinicAppointmentSystem() {
                             ' - ' +
                             end.toLocaleDateString('tr-TR', options)
                           );
-                      })()}
+                        })()}
                   </div>
                 </div>
                 <button
                   onClick={() => changeDate(view === 'day' ? 1 : 7)}
                   className="p-2.5 hover:bg-gray-100 rounded-xl transition-all"
-                  >
+                >
                   <ChevronRight className="w-5 h-5" />
                 </button>
-             </div>
+              </div>
             )}
 
             {view !== 'patients' && (
@@ -755,9 +882,21 @@ export default function ClinicAppointmentSystem() {
                 Bugün
               </button>
             )}
+
+            <button
+              onClick={async () => {
+                await supabase.auth.signOut();
+                setUser(null);
+                setUserRole(null);
+              }}
+              className="px-5 py-2.5 bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-xl hover:from-gray-600 hover:to-gray-700 font-medium shadow-lg transition-all"
+            >
+              Çıkış
+            </button>
           </div>
         </div>
 
+        {/* PART 3 BAŞLANGIÇ */}
         {view === 'day' ? (
           <DayView
             workingHours={workingHours}
@@ -791,7 +930,8 @@ export default function ClinicAppointmentSystem() {
           />
         )}
       </div>
-      {/* Add Patient Modal */}  
+
+      {/* Add Patient Modal */}
       {showPatientForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
@@ -823,15 +963,15 @@ export default function ClinicAppointmentSystem() {
                   placeholder="Örn: Ayşe Yılmaz"
                 />
               </div>
+
               {suggestedSlot && (
                 <div className="mt-3 text-xs bg-blue-50 border border-blue-200 text-blue-800 rounded-xl p-3 flex items-center justify-between">
                   <div>
-                    <div className="font-semibold mb-1">
-                      Akıllı öneri:
-                    </div>
+                    <div className="font-semibold mb-1">Akıllı öneri:</div>
                     <div>
                       {formatDate(suggestedSlot.date)} •{' '}
-                      {normalizeTime(suggestedSlot.time)} ({suggestedSlot.duration} dk)
+                      {normalizeTime(suggestedSlot.time)} (
+                      {suggestedSlot.duration} dk)
                     </div>
                   </div>
                   <button
@@ -852,7 +992,6 @@ export default function ClinicAppointmentSystem() {
                   </button>
                 </div>
               )}
-
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -892,7 +1031,10 @@ export default function ClinicAppointmentSystem() {
                   type="date"
                   value={patientForm.dateOfBirth}
                   onChange={(e) =>
-                    setPatientForm({ ...patientForm, dateOfBirth: e.target.value })
+                    setPatientForm({
+                      ...patientForm,
+                      dateOfBirth: e.target.value,
+                    })
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 />
@@ -932,27 +1074,27 @@ export default function ClinicAppointmentSystem() {
           </div>
         </div>
       )}
-  
+
       {/* Add Appointment Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-          <div className="flex justify-between items-center p-6 border-b bg-gradient-to-r from-pink-50 to-purple-50 rounded-t-2xl">
-            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-              <Plus className="w-6 h-6 text-pink-600" />
-              Yeni Randevu
-            </h3>
-            <button
-              onClick={() => {
-                setShowAddModal(false);
-                setSuggestedSlot(null);
-                setShowPatientSuggestions(false);
-              }}
-              className="p-2 hover:bg-white rounded-xl transition-all"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+            <div className="flex justify-between items-center p-6 border-b bg-gradient-to-r from-pink-50 to-purple-50 rounded-t-2xl">
+              <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <Plus className="w-6 h-6 text-pink-600" />
+                Yeni Randevu
+              </h3>
+              <button
+                onClick={() => {
+                  setShowAddModal(false);
+                  setSuggestedSlot(null);
+                  setShowPatientSuggestions(false);
+                }}
+                className="p-2 hover:bg-white rounded-xl transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
             <div className="p-6 space-y-4">
               <div>
@@ -980,17 +1122,19 @@ export default function ClinicAppointmentSystem() {
                       patientName: e.target.value,
                     });
                     suggestBestSlotForPatient(e.target.value);
-                    setShowPatientSuggestions(true); // yazdıkça liste açılsın
+                    setShowPatientSuggestions(true);
                   }}
                   onFocus={() => {
-                    if (newAppointment.patientName && matchingPatients.length > 0) {
+                    if (
+                      newAppointment.patientName &&
+                      matchingPatients.length > 0
+                    ) {
                       setShowPatientSuggestions(true);
                     }
                   }}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
                   placeholder="Örn: Ayşe Yılmaz"
                 />
-                {/* Hasta adı yazıldıkça öneriler */}
                 {showPatientSuggestions &&
                   newAppointment.patientName &&
                   matchingPatients.length > 0 && (
@@ -1002,9 +1146,13 @@ export default function ClinicAppointmentSystem() {
                           onClick={() => handleSelectPatient(p)}
                           className="w-full text-left px-4 py-2 hover:bg-pink-50 flex flex-col"
                         >
-                          <span className="font-medium text-gray-800">{p.name}</span>
+                          <span className="font-medium text-gray-800">
+                            {p.name}
+                          </span>
                           {p.phone && (
-                            <span className="text-xs text-gray-500">{p.phone}</span>
+                            <span className="text-xs text-gray-500">
+                              {p.phone}
+                            </span>
                           )}
                         </button>
                       ))}
@@ -1021,7 +1169,10 @@ export default function ClinicAppointmentSystem() {
                   type="tel"
                   value={newAppointment.phone}
                   onChange={(e) =>
-                    setNewAppointment({ ...newAppointment, phone: e.target.value })
+                    setNewAppointment({
+                      ...newAppointment,
+                      phone: e.target.value,
+                    })
                   }
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
                   placeholder="0532 xxx xx xx"
@@ -1063,7 +1214,10 @@ export default function ClinicAppointmentSystem() {
                 <textarea
                   value={newAppointment.notes}
                   onChange={(e) =>
-                    setNewAppointment({ ...newAppointment, notes: e.target.value })
+                    setNewAppointment({
+                      ...newAppointment,
+                      notes: e.target.value,
+                    })
                   }
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
                   rows="3"
@@ -1112,126 +1266,6 @@ export default function ClinicAppointmentSystem() {
 
 /* ------------------------------- Day View -------------------------------- */
 
-/* ---------------- Durum etiketleri (helper) ---------------- */
-
-const STATUS_LABELS = {
-  planned: 'Beklemede',
-  completed: 'Tamamlandı',
-  no_show: 'Gelmedi',
-  cancelled: 'İptal',
-};
-// ---------------------- Risk Skoru Hesaplayıcı ----------------------
-
-function calculateRiskFromHistory(history = [], patient) {
-  const records = Array.isArray(history) ? history : [];
-  const today = new Date();
-  let score = records.length === 0 ? 10 : 20;
-
-  if (records.length > 0) {
-    const sorted = [...records].sort(
-      (a, b) => new Date(a.date) - new Date(b.date)
-    );
-    const last = sorted[sorted.length - 1];
-    const lastDate = new Date(last.date);
-    const daysSinceLast =
-      (today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24);
-
-    // Uzun süredir kontrole gelmemişse riski arttır
-    if (daysSinceLast > 365) score += 40;
-    else if (daysSinceLast > 180) score += 25;
-    else if (daysSinceLast > 90) score += 10;
-
-    // Gelmedi statüsü (no_show) her biri için +15
-    const noShows = records.filter((a) => a.status === 'no_show').length;
-    score += noShows * 15;
-
-    // Düzenli gelen hasta ise biraz düşürelim
-    const completed = records.filter((a) => a.status === 'completed').length;
-    if (completed >= 5) score -= 10;
-  }
-
-  // Klinik özel heuristikler
-  const hasOperation = records.some((a) =>
-    a.type?.toLowerCase().includes('operasyon')
-  );
-  if (hasOperation) score += 15;
-
-  const flaggedNotes = records.some((a) =>
-    a.notes?.toLowerCase().includes('yüksek risk')
-  );
-  if (flaggedNotes) score += 10;
-
-  if (records.length >= 5) score += 5;
-
-  if (patient?.age && patient.age >= 40) score += 5;
-
-  // Sınırlar
-  score = Math.max(0, Math.min(100, score));
-
-  let level;
-  if (score >= 70) level = 'Yüksek';
-  else if (score >= 40) level = 'Orta';
-  else level = 'Düşük';
-
-  return { score, level };
-}
-
-function getRiskBadgeClasses(level) {
-  if (level === 'Yüksek') {
-    return 'bg-red-50 text-red-700 border-red-200';
-  }
-  if (level === 'Orta') {
-    return 'bg-amber-50 text-amber-700 border-amber-200';
-  }
-  return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-}
-
-// Küçük risk etiketi komponenti
-function RiskBadge({ history, patient }) {
-  const { score, level } = calculateRiskFromHistory(history || [], patient);
-  const badgeClass = getRiskBadgeClasses(level);
-
-  return (
-    <div
-      className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-medium ${badgeClass}`}
-    >
-      <span>Risk: {level}</span>
-      <span className="text-[10px] opacity-70">({score}/100)</span>
-    </div>
-  );
-}
-function getStatusColorClasses(status) {
-  switch (status) {
-    case 'completed':
-      return 'bg-green-50 border-green-200';
-    case 'no_show':
-      return 'bg-red-50 border-red-200';
-    case 'cancelled':
-      return 'bg-gray-100 border-gray-300';
-    case 'planned':
-    default:
-      return 'bg-yellow-50 border-yellow-200';
-  }
-}
-// WeekView'dan önce bu helper fonksiyonu ekleyin
-function getStatusBadgeClass(status) {
-  switch (status) {
-    case 'completed':
-      return 'bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-[10px] font-semibold';
-    case 'no_show':
-      return 'bg-red-100 text-red-800 px-2 py-0.5 rounded-full text-[10px] font-semibold';
-    case 'cancelled':
-      return 'bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] font-semibold';
-    case 'planned':
-    default:
-      return 'bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full text-[10px] font-semibold';
-  }
-}
-// calculateMedicalRisk: ileri seviye klinik risk analizi için taslak fonksiyon.
-// Şu an kullanılmıyor; daha sonra ayrıntılı risk skorlaması için devreye alınabilir.
-
-/* ------------------------ Day View: Günlük Takvim ------------------------ */
-
 function DayView({
   workingHours,
   appointments,
@@ -1243,7 +1277,6 @@ function DayView({
 }) {
   return (
     <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-      {/* HEADER */}
       <div className="p-6 border-b bg-gradient-to-r from-pink-50 to-purple-50">
         <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
           <Calendar className="w-5 h-5 text-pink-600" />
@@ -1251,7 +1284,6 @@ function DayView({
         </h3>
       </div>
 
-      {/* BODY */}
       <div className="p-6">
         <div className="space-y-3">
           {workingHours.map((time) => {
@@ -1262,12 +1294,10 @@ function DayView({
 
             return (
               <div key={time} className="flex gap-4 items-stretch">
-                {/* Saat sütunu */}
                 <div className="w-20 text-gray-600 font-semibold pt-4 text-center">
                   {time}
                 </div>
 
-                {/* Boş slot */}
                 {available ? (
                   <button
                     onClick={() => openAddModal(time, currentDate)}
@@ -1277,20 +1307,20 @@ function DayView({
                     Randevu Ekle
                   </button>
                 ) : (
-                  /* Dolu slot – kartın kendisine tıklayınca hasta profili açılıyor */
                   <div
-                    onClick={() => openPatientHistory(appointment.patient_name)}
-                    className={`
-                      flex-1 min-h-[80px]
+                    onClick={() =>
+                      openPatientHistory(appointment.patient_name)
+                    }
+                    className={`flex-1 min-h-[80px]
                       rounded-2xl px-4 py-3
                       shadow-sm hover:shadow-md transition-all duration-200
                       flex items-center justify-between gap-4
                       cursor-pointer text-left
                       ${getStatusColorClasses(appointment.status)}
-                      ${appointment.status === 'completed' ? 'opacity-80' : ''}
-                    `}
+                      ${
+                        appointment.status === 'completed' ? 'opacity-80' : ''
+                      }`}
                   >
-                    {/* SOL BLOK: hasta bilgileri */}
                     <div className="flex items-center gap-3 overflow-hidden">
                       <span className="text-2xl opacity-80 flex-shrink-0">
                         {getTypeIcon(appointment.type)}
@@ -1315,11 +1345,9 @@ function DayView({
                       </div>
                     </div>
 
-                    {/* SAĞ BLOK: sadece status dropdown */}
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <select
                         value={appointment.status}
-                        // 🔹 Burada stopPropagation: dropdown'a tıklayınca modal açılmasın
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => {
                           e.stopPropagation();
@@ -1344,7 +1372,6 @@ function DayView({
   );
 }
 
-
 /* ------------------------------- Week View -------------------------------- */
 
 function WeekView({
@@ -1354,10 +1381,9 @@ function WeekView({
   openAddModal,
   getTypeColor,
   getDateString,
-  handleDeleteAppointment,   
   updateAppointmentStatus,
   getStatusConfig,
-  openPatientHistory,        
+  openPatientHistory,
   STATUS_OPTIONS,
 }) {
   return (
@@ -1371,7 +1397,6 @@ function WeekView({
 
       <div className="p-6">
         <div className="grid grid-cols-8 gap-3 w-full">
-          {/* Üstte gün başlıkları */}
           <div className="w-20" />
           {weekDates.map((date) => (
             <div
@@ -1390,15 +1415,12 @@ function WeekView({
             </div>
           ))}
 
-          {/* Saat satırları */}
           {workingHours.map((time) => (
             <React.Fragment key={time}>
-              {/* Solda saat sütunu */}
               <div className="w-20 text-gray-600 font-semibold pt-3 text-center">
                 {time}
               </div>
 
-              {/* Her gün için hücre */}
               {weekDates.map((date) => {
                 const dateStr = getDateString(date);
                 const appointment = appointments.find(
@@ -1411,18 +1433,16 @@ function WeekView({
                 return (
                   <div key={`${time}-${dateStr}`} className="w-full">
                     {available ? (
-                      // BOŞ SLOT
                       <button
                         onClick={() => openAddModal(time, date)}
                         className="w-full h-[90px] border-2 border-dashed border-gray-200 rounded-xl 
-                                   px-3 py-2 hover:border-pink-400 hover:bg-pink-50 transition-all 
-                                   text-xs text-gray-400 hover:text-pink-600
-                                   flex items-center justify-center"
+                           px-3 py-2 hover:border-pink-400 hover:bg-pink-50 transition-all 
+                           text-xs text-gray-400 hover:text-pink-600
+                           flex items-center justify-center"
                       >
                         <Plus className="w-4 h-4 mx-auto" />
                       </button>
                     ) : (
-                      // DOLU SLOT – karta tıklayınca hasta kartı açılır
                       <div
                         onClick={() =>
                           openPatientHistory(appointment.patient_name)
@@ -1430,8 +1450,8 @@ function WeekView({
                         className={`${getTypeColor(
                           appointment.type
                         )} w-full h-[90px] rounded-xl px-3 py-2 border-l-4 text-xs shadow-sm 
-                                   hover:shadow-md transition-all group flex flex-col justify-between 
-                                   cursor-pointer`}
+                           hover:shadow-md transition-all group flex flex-col justify-between 
+                           cursor-pointer`}
                       >
                         <div className="font-bold text-gray-800 truncate mb-1">
                           {appointment.patient_name}
@@ -1441,9 +1461,12 @@ function WeekView({
                           {appointment.type}
                         </div>
 
-                        {/* status badge + select */}
                         <div className="mt-1 flex items-center gap-2">
-                          <span className={getStatusBadgeClass(appointment.status)}>
+                          <span
+                            className={getStatusBadgeClass(
+                              appointment.status
+                            )}
+                          >
                             {STATUS_OPTIONS.find(
                               (o) => o.value === appointment.status
                             )?.label || 'Beklemede'}
@@ -1451,7 +1474,6 @@ function WeekView({
 
                           <select
                             value={appointment.status || 'planned'}
-                            // 🔹 dropdown'a tıklayınca modal açılmasın
                             onClick={(e) => e.stopPropagation()}
                             onChange={(e) => {
                               e.stopPropagation();
@@ -1461,9 +1483,9 @@ function WeekView({
                               );
                             }}
                             className="text-[10px] border border-gray-300 rounded-lg px-1.5 py-0.5 
-                                       bg-white text-gray-600 hover:border-pink-400 focus:outline-none 
-                                       focus:ring-1 focus:ring-pink-500
-                                       opacity-0 group-hover:opacity-100 transition-opacity"
+                               bg-white text-gray-600 hover:border-pink-400 focus:outline-none 
+                               focus:ring-1 focus:ring-pink-500
+                               opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             {STATUS_OPTIONS.map((opt) => (
                               <option key={opt.value} value={opt.value}>
@@ -1484,7 +1506,6 @@ function WeekView({
     </div>
   );
 }
-
 
 /* ----------------------------- Patients View ----------------------------- */
 
@@ -1509,12 +1530,10 @@ function PatientsView({
                 Toplam {patients.length} hasta
               </p>
               <div className="mt-2">
-                {/* Klinik genel risk görünümü */}
                 <RiskBadge history={appointments} />
               </div>
             </div>
           </div>
-          
 
           <button
             onClick={onAddPatient}
@@ -1525,13 +1544,14 @@ function PatientsView({
           </button>
         </div>
       </div>
-
       <div className="p-6">
         {patients.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             <Users className="w-16 h-16 mx-auto mb-4 text-gray-300" />
             <p className="text-lg font-medium">Henüz hasta kaydı yok</p>
-            <p className="text-sm mt-2">Sağ üstten &quot;Yeni Hasta&quot; ekleyebilirsiniz.</p>
+            <p className="text-sm mt-2">
+              Sağ üstten &quot;Yeni Hasta&quot; ekleyebilirsiniz.
+            </p>
           </div>
         ) : (
           <div className="grid gap-4">
@@ -1546,56 +1566,63 @@ function PatientsView({
                   onClick={() => openPatientHistory(patient.name)}
                   className="bg-gradient-to-r from-pink-50 via-purple-50 to-blue-50 rounded-xl p-6 hover:shadow-lg transition-all text-left border-2 border-transparent hover:border-pink-300 group"
                 >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="bg-gradient-to-br from-pink-500 to-purple-600 p-3 rounded-xl">
-                        <User className="w-6 h-6 text-white" />
-                      </div>
-                      <div>
-                        <div className="font-bold text-gray-800 text-xl group-hover:text-pink-600 transition-colors">
-                          {patient.name}
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="bg-gradient-to-br from-pink-500 to-purple-600 p-3 rounded-xl">
+                          <User className="w-6 h-6 text-white" />
                         </div>
-                        {patient.phone && (
-                          <div className="text-sm text-gray-600 flex items-center gap-1 mt-1">
-                            <Phone className="w-3 h-3" />
-                            {patient.phone}
+                        <div>
+                          <div className="font-bold text-gray-800 text-xl group-hover:text-pink-600 transition-colors">
+                            {patient.name}
                           </div>
-                        )}
-                        <div className="mt-2">
-                          <RiskBadge history={patientHistory} patient={patient} />
+                          {patient.phone && (
+                            <div className="text-sm text-gray-600 flex items-center gap-1 mt-1">
+                              <Phone className="w-3 h-3" />
+                              {patient.phone}
+                            </div>
+                          )}
+                          <div className="mt-2">
+                            <RiskBadge
+                              history={patientHistory}
+                              patient={patient}
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    {patient.lastVisit && (
-                      <div className="text-sm text-gray-600 flex items-center gap-2">
-                        <Calendar className="w-4 h-4" />
-                        Son ziyaret:{' '}
-                        {new Date(patient.lastVisit).toLocaleDateString('tr-TR', {
-                          day: 'numeric',
-                          month: 'long',
-                          year: 'numeric',
-                        })}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="text-center bg-white rounded-xl px-4 py-3 border-2 border-pink-200 shadow-sm">
-                      <div className="text-2xl font-bold text-pink-600">
-                        {patient.totalVisits}
-                      </div>
-                      <div className="text-xs text-gray-600 mt-1">Ziyaret</div>
-                    </div>
-                    {patient.upcomingAppointments > 0 && (
-                      <div className="text-center bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl px-4 py-3 shadow-lg">
-                        <div className="text-2xl font-bold">
-                          {patient.upcomingAppointments}
+                      {patient.lastVisit && (
+                        <div className="text-sm text-gray-600 flex items-center gap-2">
+                          <Calendar className="w-4 h-4" />
+                          Son ziyaret:{' '}
+                          {new Date(
+                            patient.lastVisit
+                          ).toLocaleDateString('tr-TR', {
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric',
+                          })}
                         </div>
-                        <div className="text-xs mt-1">Yaklaşan</div>
+                      )}
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="text-center bg-white rounded-xl px-4 py-3 border-2 border-pink-200 shadow-sm">
+                        <div className="text-2xl font-bold text-pink-600">
+                          {patient.totalVisits}
+                        </div>
+                        <div className="text-xs text-gray-600 mt-1">
+                          Ziyaret
+                        </div>
                       </div>
-                    )}
+                      {patient.upcomingAppointments > 0 && (
+                        <div className="text-center bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl px-4 py-3 shadow-lg">
+                          <div className="text-2xl font-bold">
+                            {patient.upcomingAppointments}
+                          </div>
+                          <div className="text-xs mt-1">Yaklaşan</div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
                 </button>
               );
             })}
@@ -1605,6 +1632,9 @@ function PatientsView({
     </div>
   );
 }
+
+/* ------------------------- PatientHistory Modal -------------------------- */
+
 function PatientHistoryModal({
   selectedPatient,
   patient,
@@ -1614,15 +1644,15 @@ function PatientHistoryModal({
   onClose,
 }) {
   const history = getPatientHistory(selectedPatient);
+
   function getClinicalRisk() {
     if (!patient) return { label: 'Bilinmiyor', color: 'text-gray-500' };
 
-    // Örnek basit mantık – sonra detaylandırırız
     if (patient.highRiskFlag) {
       return { label: 'Yüksek Risk', color: 'text-red-600' };
     }
 
-    if (history.some(h => h.type === 'Yüksek Riskli Gebelik')) {
+    if (history.some((h) => h.type === 'Yüksek Riskli Gebelik')) {
       return { label: 'Yüksek Risk', color: 'text-red-600' };
     }
 
@@ -1635,7 +1665,6 @@ function PatientHistoryModal({
 
   const { label: riskLabel } = getClinicalRisk();
 
-  // 🔹 Hasta profili için local state
   const [profile, setProfile] = React.useState({
     phone: '',
     diagnosis: '',
@@ -1644,7 +1673,6 @@ function PatientHistoryModal({
   const [loadingProfile, setLoadingProfile] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
 
-  // 🔹 Modal açıldığında hastanın profilini Supabase'den çek
   React.useEffect(() => {
     let isMounted = true;
 
@@ -1662,7 +1690,6 @@ function PatientHistoryModal({
           console.error('Hasta profili yüklenirken hata:', error);
         }
 
-        // Eğer daha önce profil yoksa, son randevudaki telefonu default yap
         const lastPhone =
           history && history.length > 0 ? history[0].phone || '' : '';
 
@@ -1685,7 +1712,6 @@ function PatientHistoryModal({
     };
   }, [selectedPatient]);
 
-  // 🔹 Profili kaydet (upsert)
   const handleSaveProfile = async () => {
     try {
       setSaving(true);
@@ -1726,7 +1752,9 @@ function PatientHistoryModal({
               <History className="w-6 h-6 text-pink-600" />
               Hasta Profili &amp; Geçmişi
             </h3>
-            <p className="text-gray-600 mt-1 font-medium">{selectedPatient}</p>
+            <p className="text-gray-600 mt-1 font-medium">
+              {selectedPatient}
+            </p>
             <div className="mt-2">
               <RiskBadge history={history} patient={patient} />
             </div>
@@ -1741,7 +1769,7 @@ function PatientHistoryModal({
 
         {/* BODY */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* 🔹 HASTA PROFİL KARTI */}
+          {/* HASTA PROFİL KARTI */}
           <div className="bg-pink-50/60 border border-pink-100 rounded-xl p-4">
             <div className="flex justify-between items-start gap-4">
               <div className="flex items-center gap-3">
@@ -1761,16 +1789,18 @@ function PatientHistoryModal({
                     Hasta temel bilgileri • Kişisel dosya
                   </div>
                   <div className="mt-2 flex items-center gap-2">
-                    <span className="text-xs text-gray-600">Klinik Risk:</span>
+                    <span className="text-xs text-gray-600">
+                      Klinik Risk:
+                    </span>
                     <span
                       className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${
-                        riskLabel === "Düşük Risk" 
-                          ? "bg-green-50 text-green-700 border-green-200"
-                        : riskLabel === "Orta Risk"
-                          ? "bg-yellow-50 text-yellow-700 border-yellow-200"
-                        : riskLabel === "Yüksek Risk"
-                          ? "bg-red-50 text-red-700 border-red-200"
-                        : "bg-purple-50 text-purple-700 border-purple-200"
+                        riskLabel === 'Düşük Risk'
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : riskLabel === 'Orta Risk'
+                          ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                          : riskLabel === 'Yüksek Risk'
+                          ? 'bg-red-50 text-red-700 border-red-200'
+                          : 'bg-purple-50 text-purple-700 border-purple-200'
                       }`}
                     >
                       {riskLabel}
@@ -1850,7 +1880,7 @@ function PatientHistoryModal({
             </div>
           </div>
 
-          {/* 🔹 RANDEVU GEÇMİŞİ LİSTESİ */}
+          {/* RANDEVU GEÇMİŞİ LİSTESİ */}
           <div className="space-y-4">
             {history.map((apt) => (
               <div
@@ -1919,7 +1949,9 @@ function PatientHistoryModal({
               <div className="text-3xl font-bold text-pink-600">
                 {history.length}
               </div>
-              <div className="text-xs text-gray-600 mt-1">Toplam Randevu</div>
+              <div className="text-xs text-gray-600 mt-1">
+                Toplam Randevu
+              </div>
             </div>
             <div className="bg-white rounded-xl p-4 shadow-sm">
               <div className="text-3xl font-bold text-green-600">
@@ -1929,9 +1961,11 @@ function PatientHistoryModal({
             </div>
             <div className="bg-white rounded-xl p-4 shadow-sm">
               <div className="text-3xl font-bold text-blue-600">
-                {history.filter(
-                  (a) => !a.completed && new Date(a.date) >= new Date()
-                ).length}
+                {
+                  history.filter(
+                    (a) => !a.completed && new Date(a.date) >= new Date()
+                  ).length
+                }
               </div>
               <div className="text-xs text-gray-600 mt-1">Yaklaşan</div>
             </div>

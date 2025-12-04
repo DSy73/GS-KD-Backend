@@ -1,1 +1,5 @@
 Supabase Database şifre: GSe23101970!?
+Uygulamaya giriş: 	user: gsahini@msn.com 		şifre: Gs23101970
+			user: bahar_oncel@hotmail.com	şifre: Bo35İzmir
+
+postgresql://postgres:GSe23101970!?@db.pnlwazajfxbglagerjzs.supabase.co:5432/postgres
