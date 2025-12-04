@@ -687,7 +687,29 @@ export default function ClinicAppointmentSystem() {
       return new Date(b.lastVisit) - new Date(a.lastVisit);
     });
   };
-
+  const handleTogglePatientKvkk = async (patientId, currentValue) => {
+    try {
+      const newValue = !currentValue;
+  
+      const { error } = await supabase
+        .from('patients')
+        .update({ kvkk_confirmed: newValue })
+        .eq('id', patientId);
+  
+      if (error) throw error;
+  
+      // state'i de güncelle
+      setPatients((prev) =>
+        prev.map((p) =>
+          p.id === patientId ? { ...p, kvkk_confirmed: newValue } : p
+        )
+      );
+    } catch (err) {
+      console.error('KVKK durumu güncellenirken hata:', err);
+      alert('KVKK durumu güncellenemedi: ' + err.message);
+    }
+  };
+  
   const stats = {
     today: getTodayAppointments(currentDate).length || 0,
     week:
@@ -936,6 +958,7 @@ export default function ClinicAppointmentSystem() {
             getPatientHistory={getPatientHistory}
             openPatientHistory={openPatientHistory}
             onAddPatient={() => setShowPatientForm(true)}
+            onToggleKvkk={handleTogglePatientKvkk}   // ✅ yeni prop
           />
         )}
       </div>
@@ -1545,6 +1568,7 @@ function PatientsView({
   getPatientHistory,
   openPatientHistory,
   onAddPatient,
+  onToggleKvkk,   // ✅ yeni
 }) {
   return (
     <div className="bg-white rounded-2xl shadow-lg">
@@ -1618,17 +1642,26 @@ function PatientsView({
                               patient={patient}
                             />
                           </div>
-                          {/* KVKK Durumu */}
-                          <div className="mt-2">
-                            {patient.kvkkConfirmed ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-50 text-green-700 border border-green-200">
-                                KVKK Formu: Alındı
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                                KVKK Formu: Eksik
-                              </span>
-                            )}
+                          {/* KVKK Durumu - Tıklanabilir */}
+                            <div className="mt-2">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation(); // karta tıklama olayını engelle (yoksa history açılır)
+                                  if (onToggleKvkk) {
+                                    onToggleKvkk(patient.id, patient.kvkkConfirmed);
+                                  }
+                                }}
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors
+                                  ${
+                                    patient.kvkkConfirmed
+                                      ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                                      : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                  }`}
+                              >
+                                KVKK Formu: {patient.kvkkConfirmed ? 'Alındı' : 'Eksik'}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
