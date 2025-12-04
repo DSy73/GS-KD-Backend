@@ -213,7 +213,9 @@ export default function ClinicAppointmentSystem() {
     email: '',
     dateOfBirth: '',
     notes: '',
+    kvkkConfirmed: false,   // ✅ KVKK alanı
   });
+  
 
   const [suggestedSlot, setSuggestedSlot] = useState(null);
 
@@ -496,7 +498,9 @@ export default function ClinicAppointmentSystem() {
         email: patientForm.email || null,
         date_of_birth: patientForm.dateOfBirth || null,
         notes: patientForm.notes || null,
+        kvkk_confirmed: !!patientForm.kvkkConfirmed,   // ✅ DB’ye yaz
       };
+      
 
       const { data, error } = await supabase
         .from('patients')
@@ -514,6 +518,7 @@ export default function ClinicAppointmentSystem() {
         email: '',
         dateOfBirth: '',
         notes: '',
+        kvkkConfirmed: false,
       });
     } catch (error) {
       console.error('Hasta kaydedilirken hata:', error);
@@ -670,7 +675,9 @@ export default function ClinicAppointmentSystem() {
         lastVisit,
         totalVisits: history.length,
         upcomingAppointments,
+        kvkkConfirmed: p.kvkk_confirmed ?? false,   // ✅ ek bilgi
       };
+      
     });
 
     return enriched.sort((a, b) => {
@@ -1056,6 +1063,27 @@ export default function ClinicAppointmentSystem() {
                   placeholder="Genel sağlık bilgileri, önemli notlar..."
                 />
               </div>
+              {/* KVKK Onayı Checkbox */}
+              <div className="pt-2">
+                <label className="inline-flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={patientForm.kvkkConfirmed}
+                    onChange={(e) =>
+                      setPatientForm({
+                        ...patientForm,
+                        kvkkConfirmed: e.target.checked,
+                      })
+                    }
+                    className="mt-0.5 w-4 h-4 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                  />
+                  <span>
+                    Hastaya <span className="font-semibold">KVKK Aydınlatma Metni</span>{' '}
+                    sözlü/yazılı olarak iletilmiştir.
+                  </span>
+                </label>
+              </div>
+
             </div>
 
             <div className="flex gap-3 p-6 border-t bg-gray-50 rounded-b-2xl">
@@ -1589,6 +1617,18 @@ function PatientsView({
                               history={patientHistory}
                               patient={patient}
                             />
+                          </div>
+                          {/* KVKK Durumu */}
+                          <div className="mt-2">
+                            {patient.kvkkConfirmed ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-50 text-green-700 border border-green-200">
+                                KVKK Formu: Alındı
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                KVKK Formu: Eksik
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
