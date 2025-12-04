@@ -498,8 +498,10 @@ export default function ClinicAppointmentSystem() {
         email: patientForm.email || null,
         date_of_birth: patientForm.dateOfBirth || null,
         notes: patientForm.notes || null,
-        kvkk_confirmed: !!patientForm.kvkkConfirmed,   // ✅ DB’ye yaz
+        kvkk_approved: !!patientForm.kvkkConfirmed,
+        kvkk_approved_at: patientForm.kvkkConfirmed ? new Date().toISOString() : null,
       };
+      
       
 
       const { data, error } = await supabase
@@ -937,7 +939,6 @@ export default function ClinicAppointmentSystem() {
             getPatientHistory={getPatientHistory}
             openPatientHistory={openPatientHistory}
             onAddPatient={() => setShowPatientForm(true)}
-            onToggleKvkk={handleTogglePatientKvkk}   // ✅ yeni prop
           />
         )}
       </div>
@@ -1547,7 +1548,6 @@ function PatientsView({
   getPatientHistory,
   openPatientHistory,
   onAddPatient,
-  onToggleKvkk,   // ✅ yeni
 }) {
   return (
     <div className="bg-white rounded-2xl shadow-lg">
