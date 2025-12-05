@@ -997,35 +997,8 @@ export default function ClinicAppointmentSystem() {
                     className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="Örn: Ayşe Yılmaz"
                   />
-                  {showSuggestions &&
-                    matchingPatients &&
-                    matchingPatients.length > 0 && (
-                      <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
-                        {matchingPatients.map((p) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => {
-                              setForm({
-                                ...form,
-                                patientName: p.name,
-                                phone: p.phone || "",
-                              });
-                              setShowSuggestions(false);
-                            }}
-                            className="w-full text-left px-4 py-2 hover:bg-pink-50 flex flex-col"
-                          >
-                            <span className="font-medium text-gray-800">{p.name}</span>
-                            {p.phone && (
-                              <span className="text-xs text-gray-500">{p.phone}</span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                  )}
-
+          
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Telefon
@@ -1617,12 +1590,6 @@ function PatientsView({
 function AddAppointmentModal({ selectedSlot, onClose, onSave }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
 
-  const matchingPatients = patients?.filter((p) =>
-    form.patientName
-      ? p.name.toLowerCase().includes(form.patientName.toLowerCase())
-      : false
-  );
-
   const [form, setForm] = useState({
     patientName: "",
     phone: "",
@@ -1631,6 +1598,12 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave }) {
     notes: "",
   });
 
+  const matchingPatients = patients?.filter((p) =>
+    form.patientName
+      ? p.name.toLowerCase().includes(form.patientName.toLowerCase())
+      : false
+  );
+  
   const handleChangeType = (value) => {
     const type = appointmentTypes.find((t) => t.value === value);
     setForm((prev) => ({
@@ -1689,12 +1662,12 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave }) {
             <input
               type="text"
               value={form.patientName}
-              onChange={(e) => { 
+              onChange={(e) => {
                 setForm((prev) => ({
                   ...prev,
                   patientName: e.target.value,
                 }));
-                setShowSuggestions(e.target.value.length > 0); 
+                 setShowSuggestions(e.target.value.length > 0); 
               }}
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
               placeholder="Örn: Ayşe Yılmaz"
