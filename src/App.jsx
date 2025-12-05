@@ -913,6 +913,7 @@ export default function ClinicAppointmentSystem() {
                 setShowPatientHistory(true);
               }}
               onDeleteAppointment={handleDeleteAppointment}
+              STATUS_OPTIONS={STATUS_OPTIONS}
             />
           )}
 
@@ -1237,8 +1238,9 @@ function WeekView({
   getDateString,
   updateAppointmentStatus,
   openPatientHistory,
-  onDeleteAppointment,
-}) {
+  STATUS_OPTIONS,   
+})
+
   return (
     <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
       <div className="p-6 border-b bg-gradient-to-r from-pink-50 to-purple-50">
