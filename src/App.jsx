@@ -633,6 +633,27 @@ export default function ClinicAppointmentSystem() {
       alert('Hasta silinemedi: ' + err.message);
     }
   };
+  const handleDeleteAppointment = async (appointmentId) => {
+    const confirmed = window.confirm(
+      'Bu randevuyu silmek istediğinize emin misiniz?'
+    );
+    if (!confirmed) return;
+  
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .delete()
+        .eq('id', appointmentId);
+  
+      if (error) throw error;
+  
+      setAppointments((prev) => prev.filter((apt) => apt.id !== appointmentId));
+      showToast('Randevu silindi.');
+    } catch (error) {
+      console.error('Randevu silinirken hata:', error);
+      showToast('Randevu silinemedi!', 'error');
+    }
+  };
   // ----------------------- PATIENT SAVE -----------------------
 
   const handleSavePatient = async () => {
@@ -896,6 +917,7 @@ export default function ClinicAppointmentSystem() {
                 setSelectedPatient(name);
                 setShowPatientHistory(true);
               }}
+              onDeleteAppointment={handleDeleteAppointment}  // ✅ BU SATIRI EKLEYİN
             />
           )}
 
@@ -912,10 +934,10 @@ export default function ClinicAppointmentSystem() {
                 setSelectedPatient(name);
                 setShowPatientHistory(true);
               }}
-              onDeleteAppointment={handleDeleteAppointment}
+              onDeleteAppointment={handleDeleteAppointment}  // ✅ BU SATIRI EKLEYİN
               STATUS_OPTIONS={STATUS_OPTIONS}
             />
-          )}
+          )}                                
 
           {view === "patients" && (
             <PatientsView
@@ -1351,13 +1373,12 @@ function WeekView({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onDeleteAppointment(appointment);
+                            onDeleteAppointment(appointment.id);  // ✅ appointment.id kullanın
                           }}
-                          className="text-[10px] text-red-600 hover:text-red-800 underline"
+                          className="mt-1 text-[10px] text-red-600 hover:text-red-800 underline"
                         >
                           Sil
                         </button>
-
                       </div>
                     )}
                   </div>
