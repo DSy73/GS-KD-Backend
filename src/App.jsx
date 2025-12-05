@@ -1333,7 +1333,7 @@ function WeekView({
                     {available ? (
                       <button
                         onClick={() => openAddModal(time, date)}
-                        className="w-full h-[90px] border-2 border-dashed border-gray-200 rounded-xl 
+                        className="w-full h-[96px] border-2 border-dashed border-gray-200 rounded-xl 
                           px-3 py-2 hover:border-pink-400 hover:bg-pink-50 transition-all 
                           text-xs text-gray-400 hover:text-pink-600
                           flex items-center justify-center"
@@ -1347,19 +1347,21 @@ function WeekView({
                         }
                         className={`${getTypeColor(
                           appointment.type
-                        )} w-full h-[90px] rounded-xl px-3 py-2 border-l-4 text-xs shadow-sm 
-                          hover:shadow-md transition-all group flex flex-col justify-between 
+                        )} w-full min-h-[96px] rounded-xl px-3 py-2 border-l-4 text-xs shadow-sm 
+                          hover:shadow-md transition-all group flex flex-col gap-1.5 justify-between 
                           cursor-pointer`}
                       >
-                        <div className="font-bold text-gray-800 truncate mb-1">
+                        {/* Hasta adı */}
+                        <div className="font-bold text-gray-800 truncate">
                           {appointment.patient_name}
                         </div>
 
-                        <div className="text-gray-600 truncate">
+                        {/* Randevu tipi */}
+                        <div className="text-gray-600 truncate text-[11px]">
                           {appointment.type}
                         </div>
 
-                        {/* TEK dropdown – durum değiştirme */}
+                        {/* Durum dropdown */}
                         <div className="mt-1">
                           <select
                             value={appointment.status || 'planned'}
@@ -1371,8 +1373,9 @@ function WeekView({
                                 e.target.value
                               );
                             }}
-                            className="w-full text-[10px] border border-gray-300 rounded-full px-2 py-1 
-                              bg-white text-gray-700 hover:border-pink-400 focus:outline-none 
+                            className="w-full border border-gray-300 rounded-full px-3 py-1 
+                              bg-white text-gray-700 text-[11px]
+                              hover:border-pink-400 focus:outline-none 
                               focus:ring-1 focus:ring-pink-500"
                           >
                             <option value="planned">Beklemede</option>
@@ -1381,11 +1384,12 @@ function WeekView({
                             <option value="cancelled">İptal</option>
                           </select>
                         </div>
-                        {/* SİL BUTONU */}
+
+                        {/* Sil butonu */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onDeleteAppointment(appointment.id);  // ✅ appointment.id kullanın
+                            onDeleteAppointment(appointment.id);
                           }}
                           className="mt-1 text-[10px] text-red-600 hover:text-red-800 underline"
                         >
@@ -1403,6 +1407,7 @@ function WeekView({
     </div>
   );
 }
+
 /* ------------------------------- Week View -------------------------------- */
 // ----------------------------- Patients View -----------------------------
 function PatientsView({
@@ -1586,9 +1591,6 @@ function PatientsView({
 }
 /* ----------------------------- Patients View ----------------------------- */
 // ------------------------- AddAppointment Modal --------------------------
-
-// ------------------------- AddAppointment Modal --------------------------
-
 function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
   const [form, setForm] = useState({
     patientName: "",
@@ -1790,7 +1792,7 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
     </div>
   );
 }
-
+// ------------------------- AddAppointment Modal --------------------------
 
 // ------------------------- PatientHistory Modal --------------------------
 
