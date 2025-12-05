@@ -413,17 +413,17 @@ export default function ClinicAppointmentSystem() {
     };
   }, [appointments, currentDate, weekDates]);
   
-  const matchingPatients = React.useMemo(
-    () =>
-      newAppointment.patientName
-        ? patients.filter((p) =>
-            p.name
-              ?.toLowerCase()
-              .includes(newAppointment.patientName.toLowerCase())
-          )
-        : [],
-    [newAppointment.patientName, patients]
-  );
+  // const matchingPatients = React.useMemo(
+  // () =>
+  //    newAppointment.patientName
+  //       ? patients.filter((p) =>
+  //           p.name
+  //             ?.toLowerCase()
+  //             .includes(newAppointment.patientName.toLowerCase())
+  //         )
+  //       : [],
+  //   [newAppointment.patientName, patients]
+  // );
 
   // ----------------------- PATIENT HELPERS -----------------------
 
@@ -1689,12 +1689,13 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave }) {
             <input
               type="text"
               value={form.patientName}
-              onChange={(e) =>
+              onChange={(e) => { 
                 setForm((prev) => ({
                   ...prev,
                   patientName: e.target.value,
-                }))
-              }
+                }));
+                setShowSuggestions(e.target.value.length > 0); 
+              }}
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
               placeholder="Örn: Ayşe Yılmaz"
             />
