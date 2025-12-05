@@ -1406,22 +1406,23 @@ function PatientsView({
       {/* HEADER */}
       <div className="p-6 border-b bg-gradient-to-r from-pink-50 to-purple-50">
         <div className="flex justify-between items-center">
-          <div>
-            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-              <Users className="w-5 h-5 text-pink-600" />
-              Tüm Hastalar
-            </h3>
-            <div className="mt-1 space-y-2">
-              <p className="text-sm text-gray-600">
-                Toplam {patients.length} hasta
-              </p>
+        <div>
+          <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <Users className="w-5 h-5 text-pink-600" />
+            Tüm Hastalar
+          </h3>
+          <div className="mt-1 space-y-2">
+            <p className="text-sm text-gray-600">
+              Toplam {patients.length} hasta
+            </p>
+            {/* ✅ SADECE HASTA VARSA GÖSTER */}
+            {patients.length > 0 && (
               <div className="mt-2">
-                {/* Genel risk etiketi (tüm randevular üzerinden) */}
                 <RiskBadge history={appointments} />
               </div>
-            </div>
+            )}
           </div>
-
+        </div>
           <button
             onClick={onAddPatient}
             className="px-4 py-2 bg-pink-500 text-white rounded-xl text-sm font-medium hover:bg-pink-600 flex items-center gap-2 shadow"
