@@ -412,6 +412,18 @@ export default function ClinicAppointmentSystem() {
       week: weekCount,
     };
   }, [appointments, currentDate, weekDates]);
+  
+  const matchingPatients = React.useMemo(
+    () =>
+      newAppointment.patientName
+        ? patients.filter((p) =>
+            p.name
+              ?.toLowerCase()
+              .includes(newAppointment.patientName.toLowerCase())
+          )
+        : [],
+    [newAppointment.patientName, patients]
+  );
 
   // ----------------------- PATIENT HELPERS -----------------------
 
@@ -985,6 +997,33 @@ export default function ClinicAppointmentSystem() {
                     className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="Örn: Ayşe Yılmaz"
                   />
+                  {showSuggestions &&
+                    matchingPatients &&
+                    matchingPatients.length > 0 && (
+                      <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                        {matchingPatients.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              setForm({
+                                ...form,
+                                patientName: p.name,
+                                phone: p.phone || "",
+                              });
+                              setShowSuggestions(false);
+                            }}
+                            className="w-full text-left px-4 py-2 hover:bg-pink-50 flex flex-col"
+                          >
+                            <span className="font-medium text-gray-800">{p.name}</span>
+                            {p.phone && (
+                              <span className="text-xs text-gray-500">{p.phone}</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                  )}
+
                 </div>
 
                 <div>
@@ -1101,6 +1140,7 @@ export default function ClinicAppointmentSystem() {
               setSelectedSlot(null);
             }}
             onSave={handleCreateAppointment}
+            patients={patients}
           />
         )}
 
@@ -1250,7 +1290,6 @@ function DayView({
 
 
 // ------------------------------- Week View --------------------------------
-/* ------------------------------- Week View -------------------------------- */
 
 function WeekView({
   weekDates,
@@ -1391,7 +1430,7 @@ function WeekView({
     </div>
   );
 }
-
+/* ------------------------------- Week View -------------------------------- */
 // ----------------------------- Patients View -----------------------------
 function PatientsView({
   patients,
@@ -1576,6 +1615,14 @@ function PatientsView({
 // ------------------------- AddAppointment Modal --------------------------
 
 function AddAppointmentModal({ selectedSlot, onClose, onSave }) {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const matchingPatients = patients?.filter((p) =>
+    form.patientName
+      ? p.name.toLowerCase().includes(form.patientName.toLowerCase())
+      : false
+  );
+
   const [form, setForm] = useState({
     patientName: "",
     phone: "",
@@ -1651,6 +1698,33 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave }) {
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
               placeholder="Örn: Ayşe Yılmaz"
             />
+            {showSuggestions &&
+              matchingPatients &&
+              matchingPatients.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                  {matchingPatients.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setForm({
+                          ...form,
+                          patientName: p.name,
+                          phone: p.phone || "",
+                        });
+                        setShowSuggestions(false);
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-pink-50 flex flex-col"
+                    >
+                      <span className="font-medium text-gray-800">{p.name}</span>
+                      {p.phone && (
+                        <span className="text-xs text-gray-500">{p.phone}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+            )}
+
           </div>
 
           <div>
