@@ -480,12 +480,22 @@ export default function ClinicAppointmentSystem() {
     );
   };
 
-  const openAddModal = (time, date) => {
-    if (!isSlotAvailable(time, date)) {
+  const openAddModal = (slotOrTime, date) => {
+    // Handle both object format { date, time, duration } and legacy (time, date) format
+    let slot;
+    if (typeof slotOrTime === 'object' && slotOrTime !== null) {
+      // New format: object with date, time, duration
+      slot = slotOrTime;
+    } else {
+      // Legacy format: (time, date) as separate parameters
+      slot = { time: slotOrTime, date };
+    }
+
+    if (slot.time && slot.date && !isSlotAvailable(slot.time, slot.date)) {
       showToast("Bu saat dolu.", "error");
       return;
     }
-    setSelectedSlot({ time, date });
+    setSelectedSlot(slot);
     setShowAddModal(true);
   };
 
@@ -514,24 +524,29 @@ export default function ClinicAppointmentSystem() {
   };
 
   const handleCreateAppointment = async (form) => {
-    if (!selectedSlot || !form.patientName) {
+    if (!form.patientName) {
       showToast("Hasta adı zorunlu.", "error");
       return;
     }
 
-    if (!isSlotAvailable(selectedSlot.time, selectedSlot.date)) {
+    // Form now contains date, time, and duration directly from the modal
+    const appointmentDate = form.date || (selectedSlot?.date ? getDateString(selectedSlot.date) : getDateString(new Date()));
+    const appointmentTime = form.time || (selectedSlot?.time ? normalizeTime(selectedSlot.time) : "09:00");
+
+    // Check availability - isSlotAvailable expects (time, date) where date can be Date or string
+    if (!isSlotAvailable(appointmentTime, appointmentDate)) {
       showToast("Bu tarih ve saatte zaten bir randevu var.", "error");
       return;
     }
 
     try {
       const appointmentData = {
-        date: getDateString(selectedSlot.date),
-        time: normalizeTime(selectedSlot.time),
+        date: appointmentDate, // Already in YYYY-MM-DD format from form
+        time: normalizeTime(appointmentTime),
         patient_name: form.patientName.trim(),
         phone: form.phone || null,
-        type: form.type,
-        duration: form.duration,
+        type: form.type || "Kontrol",
+        duration: form.duration || 60,
         notes: form.notes || null,
         completed: false,
         status: "planned",
@@ -543,7 +558,11 @@ export default function ClinicAppointmentSystem() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase error details:", error);
+        console.error("Appointment data being sent:", appointmentData);
+        throw error;
+      }
 
       const insertedAppointment = data;
 
@@ -582,7 +601,8 @@ export default function ClinicAppointmentSystem() {
       showToast("Randevu başarıyla kaydedildi.");
     } catch (error) {
       console.error("Randevu eklenirken hata:", error);
-      showToast("Randevu eklenemedi!", "error");
+      const errorMessage = error?.message || error?.details || "Bilinmeyen hata";
+      showToast(`Randevu eklenemedi: ${errorMessage}`, "error");
     }
   };
 
@@ -1158,115 +1178,157 @@ export default function ClinicAppointmentSystem() {
   );
 }
 
-
-// ------------------------------- Day View --------------------------------
+// =========================== DAY VIEW (OUTLOOK, 1 SAAT SLOT) =========================== //
 
 function DayView({
-  workingHours,
+  workingHours,          // artık kullanılmıyor ama imzada kalsın
   appointments,
   currentDate,
   openAddModal,
   getTypeIcon,
-  handleUpdateStatus,
-  openPatientHistory,
+  handleUpdateStatus,    // şimdilik kullanılmıyor
+  openPatientHistory,    // şimdilik kullanılmıyor
   onDeleteAppointment,
 }) {
+  const date = currentDate ? new Date(currentDate) : new Date();
+  const dateKey = date.toISOString().slice(0, 10);
+
+  // 07:00–23:00 arası 1 saatlik grid
+  const timeSlots = [];
+  for (let h = 7; h < 23; h++) {
+    timeSlots.push(`${String(h).padStart(2, "0")}:00`);
+  }
+
+  const dayAppointments = (appointments || []).filter(
+    (apt) => apt.date === dateKey
+  );
+
+  const handleEmptyClick = (time) => {
+    if (!openAddModal) return;
+
+    openAddModal({
+      date,         // Date objesi
+      time,         // "11:00"
+      duration: 60, // varsayılan 1 saat (modalda değişebilir)
+    });
+  };
+
+  const handleAppointmentClick = (apt) => {
+    if (!openAddModal) return;
+    openAddModal({ ...apt, isEdit: true });
+  };
+
+  const timeStringToMinutes = (t) => {
+    const [h, m] = (t || "00:00").split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  const SLOT_HEIGHT_PX = 40;
+
+  const dayLabel = date.toLocaleDateString("tr-TR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+
   return (
-    <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-      <div className="p-6 border-b bg-gradient-to-r from-pink-50 to-purple-50">
-        <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+    <div className="bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col h-full">
+      {/* HEADER */}
+      <div className="p-4 sm:p-6 border-t-2 border-t-gray-200 border-b border-gray-100 bg-gradient-to-r from-pink-50 to-purple-50 flex items-center justify-between">
+        <div className="flex items-center gap-2">
           <Calendar className="w-5 h-5 text-pink-600" />
-          Günlük Takvim
-        </h3>
+          <div>
+            <h3 className="text-base sm:text-lg font-bold text-gray-800">
+              Günlük Takvim
+            </h3>
+            <div className="text-xs sm:text-sm text-gray-600">
+              {dayLabel}
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="p-6">
-        <div className="space-y-3">
-          {workingHours.map((time) => {
-            const appointment = appointments.find(
-              (apt) => normalizeTime(apt.time) === normalizeTime(time)
-            );
-            const available = !appointment;
+      {/* BODY */}
+      <div className="flex flex-1 overflow-auto text-xs sm:text-sm">
+        {/* Saat sütunu */}
+        <div className="w-16 border-r border-t-2 border-gray-100 bg-gray-50">
+          {timeSlots.map((slot) => (
+            <div
+              key={slot}
+              className="h-10 border-b border-gray-100 px-1 pt-[2px] text-[10px] sm:text-xs text-gray-500 text-right"
+            >
+              {slot}
+            </div>
+          ))}
+        </div>
+
+        {/* Gün kolonu */}
+        <div className="flex-1 relative border-t-2 border-gray-100">
+          {/* Grid */}
+          {timeSlots.map((slot) => (
+            <div
+              key={slot}
+              className="h-10 border-b border-gray-100 cursor-pointer hover:bg-green-50 transition-colors"
+              onClick={() => handleEmptyClick(slot)}
+            />
+          ))}
+
+          {/* Randevular */}
+          {dayAppointments.map((apt) => {
+            const minutesFromStart =
+              timeStringToMinutes(apt.time || "07:00") - 7 * 60;
+            const topPx =
+              (minutesFromStart / 60) * SLOT_HEIGHT_PX;
+
+            const duration = apt.duration || 60;
+            const heightPx =
+              Math.max(duration / 60, 0.5) * SLOT_HEIGHT_PX;
 
             return (
-              <div key={time} className="flex gap-4 items-stretch">
-                <div className="w-20 text-gray-600 font-semibold pt-4 text-center">
-                  {time}
-                </div>
-
-                {available ? (
-                  <button
-                    onClick={() => openAddModal(time, currentDate)}
-                    className="flex-1 border-2 border-dashed border-gray-300 rounded-xl p-4 hover:border-pink-400 hover:bg-pink-50 transition-all text-gray-400 hover:text-pink-600 font-medium group"
-                  >
-                    <Plus className="w-5 h-5 inline mr-2 group-hover:scale-110 transition-transform" />
-                    Randevu Ekle
-                  </button>
-                ) : (
-                  <div
-                    onClick={() =>
-                      openPatientHistory(appointment.patient_name)
-                    }
-                    className={`flex-1 min-h-[80px] rounded-2xl px-4 py-3 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-4 cursor-pointer text-left ${getStatusColorClasses(
-                      appointment.status
-                    )} ${
-                      appointment.status === "completed" ? "opacity-80" : ""
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <span className="text-2xl opacity-80 flex-shrink-0">
-                        {getTypeIcon(appointment.type)}
+              <div
+                key={apt.id}
+                className="absolute left-1 right-1 sm:left-1.5 sm:right-1.5 rounded-md bg-green-300/90 hover:bg-green-400 text-[10px] sm:text-xs text-gray-800 shadow-md px-1.5 py-1 cursor-pointer overflow-hidden flex flex-col"
+                style={{
+                  top: topPx,
+                  height: heightPx,
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAppointmentClick(apt);
+                }}
+              >
+                <div className="flex items-start justify-between gap-1 flex-1">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold truncate flex items-center gap-1">
+                      {getTypeIcon ? (
+                        <span className="shrink-0">
+                          {getTypeIcon(apt.type)}
+                        </span>
+                      ) : null}
+                      <span className="truncate">
+                        {apt.patient_name || apt.patientName || "Randevu"}
                       </span>
-
-                      <div className="flex flex-col leading-tight truncate">
-                        <span className="font-semibold text-gray-800 text-sm truncate">
-                          {appointment.patient_name}
-                        </span>
-
-                        <span className="text-xs text-gray-600 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {appointment.type} • {appointment.duration} dk
-                        </span>
-
-                        {appointment.phone && (
-                          <span className="text-xs text-gray-600 flex items-center gap-1">
-                            {appointment.phone}
-                            <Phone className="w-3 h-3" />
-                          </span>
-                        )}
-                      </div>
                     </div>
-
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <select
-                        value={appointment.status}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          handleUpdateStatus(appointment.id, e.target.value);
-                        }}
-                        className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-pink-400"
-                      >
-                        <option value="planned">Beklemede</option>
-                        <option value="completed">Tamamlandı</option>
-                        <option value="no_show">Gelmedi</option>
-                        <option value="cancelled">İptal</option>
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteAppointment(appointment.id);
-                        }}
-                        className="p-1.5 rounded-lg border border-gray-300 hover:bg-red-50 transition-all"
-                      >
-                        <Trash2 className="w-3 h-3 text-red-500" />
-                      </button>
+                    <div className="text-[9px] sm:text-[10px] text-gray-700 truncate">
+                      {apt.time} • {apt.type}
                     </div>
-
                   </div>
-                )}
+                  {onDeleteAppointment && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm("Bu randevuyu silmek istediğinize emin misiniz?")) {
+                          onDeleteAppointment(apt.id);
+                        }
+                      }}
+                      className="shrink-0 p-0.5 hover:bg-red-500/20 rounded transition-colors"
+                      title="Randevuyu Sil"
+                    >
+                      <Trash2 className="w-3 h-3 text-red-600" />
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -1276,149 +1338,231 @@ function DayView({
   );
 }
 
+// *------------------------------- Day View --------------------------------*
+
 
 // ------------------------------- Week View --------------------------------
 
+// Yardımcı: haftanın başlangıcı (Pazartesi)
+function getStartOfWeek(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0: Pazar, 1: Pazartesi...
+  const diff = (day === 0 ? -6 : 1 - day); // Pazartesiye çek
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+// Yardımcı: günleri üret (7 gün)
+function getWeekDays(currentDate) {
+  const start = getStartOfWeek(currentDate);
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    days.push(d);
+  }
+  return days;
+}
+
+// Yardımcı: 07:00–23:00 arası 30 dk'lık slotlar
+function getTimeSlots() {
+  const slots = [];
+  const startMinutes = 7 * 60;   // 07:00
+  const endMinutes = 23 * 60;    // 23:00
+  for (let m = startMinutes; m < endMinutes; m += 30) {
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    slots.push(
+      `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`
+    );
+  }
+  return slots;
+}
+
+// "2025-12-16" ile Date'i karşılaştırmak için
+function formatDateKey(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+// "HH:MM" -> dakika
+function timeStringToMinutes(t) {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+//const SLOT_HEIGHT_PX = 28; // her 30 dk için yükseklik
+
+// =========================== WEEK VIEW (OUTLOOK, 1 SAAT SLOT) =========================== //
+
+// "HH:MM" -> dakika
+function weekViewTimeStringToMinutes(t) {
+  const [h, m] = (t || "00:00").split(":").map(Number);
+  return h * 60 + m;
+}
+
 function WeekView({
-  weekDates,
-  workingHours,
+  currentDate,
   appointments,
   openAddModal,
-  getTypeColor,
-  getDateString,
-  updateAppointmentStatus,
-  openPatientHistory,
+  openEditModal,      // varsa kullanılır, yoksa openAddModal ile edit
+  getTypeIcon,
   onDeleteAppointment,
-  STATUS_OPTIONS,
 }) {
+  const weekDays = getWeekDays(currentDate || new Date());
+
+  // 07:00–23:00 arası 1 saatlik grid
+  const timeSlots = [];
+  for (let h = 7; h < 23; h++) {
+    timeSlots.push(`${String(h).padStart(2, "0")}:00`);
+  }
+
+  const handleEmptyCellClick = (dayDate, time) => {
+    if (!openAddModal) return;
+
+    openAddModal({
+      // DayView ile aynı formatta selectedSlot
+      date: dayDate,     // Date objesi
+      time,              // "11:00"
+      duration: 60,      // varsayılan 1 saat (modalda değişir)
+    });
+  };
+
+  const handleAppointmentClick = (apt) => {
+    if (openEditModal) {
+      openEditModal(apt);
+    } else if (openAddModal) {
+      openAddModal({ ...apt, isEdit: true });
+    }
+  };
+
+  const SLOT_HEIGHT_PX = 40; // her 1 saatlik grid yüksekliği
+
   return (
-    <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
+    <div className="bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col h-full">
       {/* HEADER */}
-      <div className="p-6 border-b bg-gradient-to-r from-pink-50 to-purple-50">
-        <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-          <Calendar className="w-5 h-5 text-pink-600" />
-          Haftalık Takvim
-        </h3>
+      <div className="flex border-t-2 border-t-gray-200 border-b border-gray-100 bg-gradient-to-r from-pink-50 to-purple-50">
+        <div className="w-16 border-r px-2 py-3 text-xs font-semibold text-gray-500">
+          Saat
+        </div>
+        {weekDays.map((day) => (
+          <div
+            key={day.toISOString()}
+            className="flex-1 border-r px-2 py-3 text-center text-xs sm:text-sm font-semibold text-gray-700"
+          >
+            <div>
+              {day.toLocaleDateString("tr-TR", {
+                weekday: "short",
+              })}
+            </div>
+            <div className="text-gray-500">
+              {day.toLocaleDateString("tr-TR", {
+                day: "2-digit",
+                month: "2-digit",
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* BODY */}
-      <div className="p-6">
-        <div className="grid grid-cols-8 gap-3 w-full">
-          {/* Sol taraftaki saat kolonunun başlığı boş */}
-          <div className="w-20" />
-
-          {/* Gün başlıkları */}
-          {weekDates.map((date) => (
+      <div className="flex flex-1 overflow-auto text-xs sm:text-sm">
+        {/* Saat sütunu */}
+        <div className="w-16 border-r border-t-2 border-gray-100 bg-gray-50">
+          {timeSlots.map((slot) => (
             <div
-              key={date.toString()}
-              className="text-center bg-gradient-to-br from-pink-50 to-purple-50 rounded-xl p-3"
+              key={slot}
+              className="h-10 border-b border-gray-100 px-1 pt-[2px] text-[10px] sm:text-xs text-gray-500 text-right"
             >
-              <div className="font-bold text-gray-800 text-lg">
-                {date.toLocaleDateString('tr-TR', { weekday: 'short' })}
-              </div>
-              <div className="text-sm text-gray-600">
-                {date.toLocaleDateString('tr-TR', {
-                  day: 'numeric',
-                  month: 'short',
-                })}
-              </div>
+              {slot}
             </div>
           ))}
+        </div>
 
-          {/* Saat satırları */}
-          {workingHours.map((time) => (
-            <React.Fragment key={time}>
-              {/* Sol tarafta saat yazan kolon */}
-              <div className="w-20 text-gray-600 font-semibold pt-3 text-center">
-                {time}
-              </div>
+        {/* Gün sütunları */}
+        {weekDays.map((day) => {
+          const dayKey = formatDateKey(day);
 
-              {/* Her gün için hücreler */}
-              {weekDates.map((date) => {
-                const dateStr = getDateString(date);
-                const appointment = appointments.find(
-                  (apt) =>
-                    getDateString(apt.date) === dateStr &&
-                    normalizeTime(apt.time) === normalizeTime(time)
-                );
-                const available = !appointment;
+          const dayAppointments = (appointments || []).filter(
+            (apt) => apt.date === dayKey
+          );
+
+          return (
+            <div
+              key={day.toISOString()}
+              className="flex-1 border-r border-t-2 border-gray-100 relative"
+            >
+              {/* Grid */}
+              {timeSlots.map((slot) => (
+                <div
+                  key={slot}
+                  className="h-10 border-b border-gray-100 cursor-pointer hover:bg-green-50 transition-colors"
+                  onClick={() => handleEmptyCellClick(day, slot)}
+                />
+              ))}
+
+              {/* Randevular */}
+              {dayAppointments.map((apt) => {
+                const minutesFromStart =
+                  weekViewTimeStringToMinutes(apt.time || "07:00") - 7 * 60;
+
+                const topPx =
+                  (minutesFromStart / 60) * SLOT_HEIGHT_PX;
+
+                const duration = apt.duration || 60;
+                const heightPx =
+                  Math.max(duration / 60, 0.5) * SLOT_HEIGHT_PX; // 30 dk ise yarım slot
 
                 return (
-                  <div key={`${time}-${dateStr}`} className="w-full">
-                    {available ? (
-                      <button
-                        onClick={() => openAddModal(time, date)}
-                        className="w-full h-[96px] border-2 border-dashed border-gray-200 rounded-xl 
-                          px-3 py-2 hover:border-pink-400 hover:bg-pink-50 transition-all 
-                          text-xs text-gray-400 hover:text-pink-600
-                          flex items-center justify-center"
-                      >
-                        <Plus className="w-4 h-4 mx-auto" />
-                      </button>
-                    ) : (
-                      <div
-                        onClick={() =>
-                          openPatientHistory(appointment.patient_name)
-                        }
-                        className={`${getTypeColor(
-                          appointment.type
-                        )} w-full h-[90px] rounded-xl px-3 py-2 border-l-4 text-xs shadow-sm 
-                          hover:shadow-md transition-all group flex flex-col justify-between 
-                          cursor-pointer`}
-                      >
-                        {/* ÜST SATIR: İSİM + TÜR + SAĞDA SİL */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="font-bold text-gray-800 truncate">
-                              {appointment.patient_name}
-                            </div>
-                            <div className="text-gray-600 truncate text-[11px]">
-                              {appointment.type}
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteAppointment(appointment.id);
-                            }}
-                            className="text-[10px] text-red-600 hover:text-red-800 underline flex-shrink-0"
-                          >
-                            Sil
-                          </button>
+                  <div
+                    key={apt.id}
+                    className="absolute left-1 right-1 sm:left-1.5 sm:right-1.5 rounded-md bg-green-300/90 hover:bg-green-400 text-[10px] sm:text-xs text-gray-800 shadow-md px-1.5 py-1 cursor-pointer overflow-hidden flex flex-col"
+                    style={{
+                      top: topPx,
+                      height: heightPx,
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAppointmentClick(apt);
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-1 flex-1">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold truncate flex items-center gap-1">
+                          {getTypeIcon ? (
+                            <span className="shrink-0">
+                              {getTypeIcon(apt.type)}
+                            </span>
+                          ) : null}
+                          <span className="truncate">
+                            {apt.patient_name || apt.patientName || "Randevu"}
+                          </span>
                         </div>
-
-                        {/* ALTTA TEK SATIR DROPDOWN */}
-                        <div>
-                          <select
-                            value={appointment.status || 'planned'}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              updateAppointmentStatus(
-                                appointment.id,
-                                e.target.value
-                              );
-                            }}
-                            className="w-full border border-gray-300 rounded-full px-3 py-1 
-                              bg-white text-gray-700 text-[11px]
-                              hover:border-pink-400 focus:outline-none 
-                              focus:ring-1 focus:ring-pink-500"
-                          >
-                            <option value="planned">Beklemede</option>
-                            <option value="completed">Tamamlandı</option>
-                            <option value="no_show">Gelmedi</option>
-                            <option value="cancelled">İptal</option>
-                          </select>
+                        <div className="text-[9px] sm:text-[10px] text-gray-700 truncate">
+                          {apt.time} • {apt.type}
                         </div>
                       </div>
-                    )}
+                      {onDeleteAppointment && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm("Bu randevuyu silmek istediğinize emin misiniz?")) {
+                              onDeleteAppointment(apt.id);
+                            }
+                          }}
+                          className="shrink-0 p-0.5 hover:bg-red-500/20 rounded transition-colors"
+                          title="Randevuyu Sil"
+                        >
+                          <Trash2 className="w-3 h-3 text-red-600" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
-            </React.Fragment>
-          ))}
-        </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1606,14 +1750,58 @@ function PatientsView({
   );
 }
 /* ----------------------------- Patients View ----------------------------- */
-// ------------------------- AddAppointment Modal --------------------------
+// =========================== ADD APPOINTMENT MODAL (1 SAAT DEFAULT) =========================== //
+
 function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
+  // 07:00–23:00 arası 30 dk'lık seçenekler (başlangıç/bitiş için)
+  const buildTimeOptions = () => {
+    const opts = [];
+    const startMinutes = 7 * 60;
+    const endMinutes = 23 * 60;
+    for (let m = startMinutes; m <= endMinutes; m += 30) {
+      const h = String(Math.floor(m / 60)).padStart(2, "0");
+      const min = String(m % 60).padStart(2, "0");
+      opts.push(`${h}:${min}`);
+    }
+    return opts;
+  };
+
+  const timeOptions = buildTimeOptions();
+
+  const timeToMinutes = (t) => {
+    const [h, m] = (t || "00:00").split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  const minutesToTime = (mins) => {
+    const h = String(Math.floor(mins / 60)).padStart(2, "0");
+    const m = String(mins % 60).padStart(2, "0");
+    return `${h}:${m}`;
+  };
+
+  // Slot’tan gelen tarih & saat
+  const defaultDate =
+    selectedSlot?.date ? new Date(selectedSlot.date) : new Date();
+
+  const defaultStartTime =
+    selectedSlot?.time && typeof selectedSlot.time === "string"
+      ? selectedSlot.time
+      : "09:00";
+
+  const defaultEndTime = (() => {
+    const base =
+      timeToMinutes(defaultStartTime) + (selectedSlot?.duration || 60);
+    return minutesToTime(base);
+  })();
+
+  const [startTime, setStartTime] = useState(defaultStartTime);
+  const [endTime, setEndTime] = useState(defaultEndTime);
+
   const [form, setForm] = useState({
-    patientName: "",
-    phone: "",
-    type: "Kontrol",
-    duration: 30,
-    notes: "",
+    patientName: selectedSlot?.patientName || "",
+    phone: selectedSlot?.phone || "",
+    type: selectedSlot?.type || "Kontrol",
+    notes: selectedSlot?.notes || "",
   });
 
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -1631,62 +1819,117 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
   );
 
   const handleChangeType = (value) => {
-    const type = appointmentTypes.find((t) => t.value === value);
     setForm((prev) => ({
       ...prev,
       type: value,
-      duration: type?.duration || 30,
     }));
   };
 
   const handleSubmit = () => {
-    onSave(form);
+    const startMin = timeToMinutes(startTime);
+    const endMin = timeToMinutes(endTime);
+
+    if (endMin <= startMin) {
+      alert("Bitiş saati, başlangıç saatinden büyük olmalı.");
+      return;
+    }
+
+    const duration = endMin - startMin;
+
+    onSave({
+      ...form,
+      date: defaultDate.toISOString().slice(0, 10), // YYYY-MM-DD
+      time: startTime,
+      duration,
+    });
   };
 
-  const dateLabel = selectedSlot ? new Date(selectedSlot.date) : new Date();
+  const dateLabel = defaultDate.toLocaleDateString("tr-TR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex justify-between items-center p-6 border-b bg-gradient-to-r from-pink-50 to-purple-50 rounded-t-2xl">
-          <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <Plus className="w-6 h-6 text-pink-600" />
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b flex items-center justify-between bg-gradient-to-r from-pink-50 to-purple-50">
+          <h2 className="text-lg font-bold text-gray-800">
             Yeni Randevu
-          </h3>
+          </h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-white rounded-xl transition-all"
+            className="text-gray-500 hover:text-gray-700 text-sm"
           >
-            <X className="w-5 h-5" />
+            Kapat
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
-          {/* Tarih & Saat */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-pink-600" />
-              Tarih &amp; Saat
-            </label>
-            <div className="text-gray-600 bg-gray-50 p-3 rounded-xl border border-gray-200">
-              {dateLabel.toLocaleDateString("tr-TR", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}{" "}
-              - {normalizeTime(selectedSlot.time)}
+        {/* Body */}
+        <div className="p-6 space-y-5 overflow-auto">
+          {/* Tarih + Saat Seçimi */}
+          <div className="space-y-2">
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Tarih ve Saat
+            </div>
+            <div className="text-sm text-gray-700 mb-2">{dateLabel}</div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-500">
+                  Başlangıç Saati
+                </label>
+                <select
+                  className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+                  value={startTime}
+                  onChange={(e) => {
+                    const newStart = e.target.value;
+                    setStartTime(newStart);
+
+                    const newStartMin = timeToMinutes(newStart);
+                    const endMin = timeToMinutes(endTime);
+                    if (endMin <= newStartMin) {
+                      setEndTime(
+                        minutesToTime(newStartMin + 60) // default fark 1 saat
+                      );
+                    }
+                  }}
+                >
+                  {timeOptions.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-500">
+                  Bitiş Saati
+                </label>
+                <select
+                  className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                >
+                  {timeOptions.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
           {/* Hasta Adı + Öneriler */}
-          <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-              <User className="w-4 h-4 text-pink-600" />
-              Hasta Adı Soyadı *
-            </label>
+          <div className="space-y-1 relative">
+            <label className="text-xs text-gray-500">Hasta Adı</label>
             <input
               type="text"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
               value={form.patientName}
               onChange={(e) => {
                 const value = e.target.value;
@@ -1696,14 +1939,12 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
                 }));
                 setShowSuggestions(value.length > 0);
               }}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
               placeholder="Örn: Ayşe Yılmaz"
             />
-
             {showSuggestions &&
               matchingPatients &&
               matchingPatients.length > 0 && (
-                <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                   {matchingPatients.map((p) => (
                     <button
                       key={p.id}
@@ -1725,89 +1966,73 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
                     </button>
                   ))}
                 </div>
-            )}
+              )}
           </div>
 
           {/* Telefon */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-              <Phone className="w-4 h-4 text-pink-600" />
-              Telefon
-            </label>
+          <div className="space-y-1">
+            <label className="text-xs text-gray-500">Telefon</label>
             <input
               type="tel"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
               value={form.phone}
               onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  phone: e.target.value,
-                }))
+                setForm((prev) => ({ ...prev, phone: e.target.value }))
               }
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
-              placeholder="0532 xxx xx xx"
             />
           </div>
 
           {/* Tür */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-              <FileText className="w-4 h-4 text-pink-600" />
+          <div className="space-y-1">
+            <label className="text-xs text-gray-500">
               Randevu Türü
             </label>
             <select
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
               value={form.type}
               onChange={(e) => handleChangeType(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
             >
-              {appointmentTypes.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.icon} {type.value} ({type.duration} dk)
-                </option>
-              ))}
+              <option value="Kontrol">Kontrol</option>
+              <option value="İlk Muayene">İlk Muayene</option>
+              <option value="USG">USG</option>
+              <option value="Prosedür">Prosedür</option>
             </select>
           </div>
 
           {/* Notlar */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-              <FileText className="w-4 h-4 text-pink-600" />
-              Notlar
-            </label>
+          <div className="space-y-1">
+            <label className="text-xs text-gray-500">Notlar</label>
             <textarea
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 resize-none"
+              rows={3}
               value={form.notes}
               onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  notes: e.target.value,
-                }))
+                setForm((prev) => ({ ...prev, notes: e.target.value }))
               }
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
-              rows="3"
-              placeholder="Ek bilgiler..."
             />
           </div>
         </div>
 
-        <div className="flex gap-3 p-6 border-t bg-gray-50 rounded-b-2xl">
+        {/* Footer */}
+        <div className="px-6 py-4 border-t flex justify-end gap-3 bg-gray-50">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 font-medium transition-all"
+            className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100"
           >
             İptal
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!form.patientName}
-            className="flex-1 px-4 py-3 bg-gradient-to-r from-pink-500 to-pink-600 text-white rounded-xl hover:from-pink-600 hover:to-pink-700 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed font-medium shadow-lg transition-all"
+            className="px-4 py-2 text-sm rounded-lg bg-pink-500 text-white hover:bg-pink-600"
           >
-            <Save className="w-4 h-4 inline mr-2" />
-            Kaydet
+            Randevuyu Kaydet
           </button>
         </div>
       </div>
     </div>
   );
 }
+
 // ------------------------- AddAppointment Modal --------------------------
 
 // ------------------------- PatientHistory Modal --------------------------
