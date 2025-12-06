@@ -1,6 +1,6 @@
 // --------------------------- IMPORTS -----------------------------
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "./supabaseClient";
 import Login from "./Login";
 import {
@@ -269,7 +269,7 @@ export default function ClinicAppointmentSystem() {
     email: "",
     dateOfBirth: "",
     notes: "",
-    kvkkConfirmed: false,
+    kvkk_approved: false,
   });
   const [patientFormLoading, setPatientFormLoading] = useState(false);
 
@@ -680,8 +680,8 @@ export default function ClinicAppointmentSystem() {
         email: patientForm.email || null,
         date_of_birth: patientForm.dateOfBirth || null,
         notes: patientForm.notes || null,
-        kvkk_approved: !!patientForm.kvkkConfirmed,
-        kvkk_approved_at: patientForm.kvkkConfirmed
+        kvkk_approved: !!patientForm.kvkk_approved,
+        kvkk_approved_at: patientForm.kvkk_approved
           ? new Date().toISOString()
           : null,
       };
@@ -702,7 +702,7 @@ export default function ClinicAppointmentSystem() {
         email: "",
         dateOfBirth: "",
         notes: "",
-        kvkkConfirmed: false,
+        kvkk_approved: false,
       });
       showToast("Hasta kaydedildi.");
     } catch (error) {
@@ -1065,11 +1065,11 @@ export default function ClinicAppointmentSystem() {
                   <label className="inline-flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={patientForm.kvkkConfirmed}
+                      checked={patientForm.kvkk_approved}
                       onChange={(e) =>
                         setPatientForm({
                           ...patientForm,
-                          kvkkConfirmed: e.target.checked,
+                          kvkk_approved: e.target.checked,
                         })
                       }
                       className="mt-0.5 w-4 h-4 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
@@ -1135,6 +1135,20 @@ export default function ClinicAppointmentSystem() {
               // sonra modalı kapat
               setShowPatientHistory(false);
               setSelectedPatient(null);
+            }}
+            onPatientUpdated={(updated) => {
+              if (!updated || !updated.id) return;
+              setPatients((prev) =>
+                prev.map((p) =>
+                  p.id === updated.id
+                    ? {
+                        ...p,
+                        kvkk_approved: updated.kvkk_approved,
+                        kvkk_approved_at: updated.kvkk_approved_at,
+                      }
+                    : p
+                )
+              );
             }}
             showToast={showToast}
           />
@@ -1806,6 +1820,7 @@ function PatientHistoryModal({
   getTypeIcon,
   onClose,
   onDeletePatient,
+  onPatientUpdated,
   showToast,
 }) {
   const history = getPatientHistory ? getPatientHistory(selectedPatient) : [];
@@ -1820,10 +1835,19 @@ function PatientHistoryModal({
 
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [saving, setSaving] = useState(false);
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
-    let isMounted = true;
+    // Reset the loaded flag when selectedPatient changes
+    hasLoadedRef.current = false;
+  }, [selectedPatient]);
 
+  useEffect(() => {
+    // Only load once per selectedPatient to prevent overwriting user changes
+    if (hasLoadedRef.current) return;
+    
+    let isMounted = true;
+  
     const loadProfile = async () => {
       try {
         const { data, error } = await supabase
@@ -1831,33 +1855,35 @@ function PatientHistoryModal({
           .select("*")
           .eq("patient_name", selectedPatient)
           .maybeSingle();
-
+  
         if (!isMounted) return;
-
+  
         if (error) {
           console.error("Hasta profili yüklenirken hata:", error);
         }
-
+  
         const lastPhone =
           history && history.length > 0 ? history[0].phone || "" : "";
-
-        setProfile((prev) => ({
-          ...prev,
+  
+        // Use patient prop for initial kvkk_approved value
+        setProfile({
           phone: data?.phone ?? lastPhone,
           diagnosis: data?.diagnosis ?? "",
           notes: data?.notes ?? "",
           kvkk_approved: patient?.kvkk_approved ?? false,
           kvkk_approved_at: patient?.kvkk_approved_at ?? null,
-        }));
+        });
+        
+        hasLoadedRef.current = true;
       } catch (err) {
         console.error("Hasta profili yüklenirken beklenmeyen hata:", err);
       } finally {
         if (isMounted) setLoadingProfile(false);
       }
     };
-
+  
     loadProfile();
-
+  
     return () => {
       isMounted = false;
     };
@@ -1899,6 +1925,14 @@ function PatientHistoryModal({
           console.error("KVKK güncellenirken hata:", kvkkError);
           showToast("KVKK bilgisi güncellenemedi!", "error");
           return;
+        }
+
+        if (onPatientUpdated) {
+          onPatientUpdated({
+            id: patient.id,
+            kvkk_approved: profile.kvkk_approved,
+            kvkk_approved_at: profile.kvkk_approved_at,
+          });
         }
       }
 
@@ -2073,39 +2107,55 @@ function PatientHistoryModal({
           </div>
 
           {/* KVKK Onayı */}
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-4 flex items-start gap-3">
             <input
+              id="kvkk-checkbox"
               type="checkbox"
-              checked={profile.kvkk_approved || false}
-              onChange={(e) =>
+              checked={!!profile.kvkk_approved}
+              disabled={loadingProfile}
+              onChange={(e) => {
+                e.stopPropagation();
+                const checked = e.target.checked;
+                console.log("Checkbox değişti:", checked);
+
                 setProfile((prev) => ({
                   ...prev,
-                  kvkk_approved: e.target.checked,
-                  kvkk_approved_at: e.target.checked
-                    ? prev.kvkk_approved_at || new Date().toISOString()
-                    : null,
-                }))
-              }
-              className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                  kvkk_approved: checked,
+                  // İşaretlenirse BUGÜNÜ yaz, kaldırılırsa tamamen sıfırla
+                  kvkk_approved_at: checked ? new Date().toISOString() : null,
+                }));
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+              className="mt-0.5 w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
             />
-            <div className="flex flex-col">
+
+            <label 
+              htmlFor="kvkk-checkbox"
+              className="flex flex-col cursor-pointer flex-1"
+            >
               <span className="text-sm font-medium text-gray-700">
                 KVKK Aydınlatma Metni ve Açık Rıza Formu Hastadan Alındı
               </span>
+
+              {!profile.kvkk_approved && (
+                <span className="text-[11px] text-gray-400 mt-0.5">
+                  Henüz KVKK formu alınmadı.
+                </span>
+              )}
+
               {profile.kvkk_approved && profile.kvkk_approved_at && (
                 <span className="text-[11px] text-gray-500 mt-0.5">
                   Alınma tarihi:{" "}
-                  {new Date(profile.kvkk_approved_at).toLocaleDateString(
-                    "tr-TR",
-                    {
-                      day: "numeric",
-                      month: "long",
-                      year: "numeric",
-                    }
-                  )}
+                  {new Date(profile.kvkk_approved_at).toLocaleDateString("tr-TR", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
                 </span>
               )}
-            </div>
+            </label>
           </div>
 
           {/* RANDEVU GEÇMİŞİ LİSTESİ */}
