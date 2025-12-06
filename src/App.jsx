@@ -1581,7 +1581,7 @@ function PatientsView({
   return (
     <div className="bg-white rounded-2xl shadow-lg">
       {/* HEADER */}
-      <div className="p-6 border-b bg-gradient-to-r from-pink-50 to-purple-50">
+      <div className="p-6 border-t-2 border-t-gray-200 border-b bg-gradient-to-r from-pink-50 to-purple-50">
         <div className="flex justify-between items-center">
         <div>
           <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
