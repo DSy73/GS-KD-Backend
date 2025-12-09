@@ -53,31 +53,6 @@ const getWeekDates = (baseDate) => {
   }
   return week;
 };
-// ---------------- PHONE MASK HELPER ----------------
-const formatPhone = (value) => {
-  if (!value) return "+90 ";
-
-  // Rakamları temizle
-  let digits = value.replace(/\D/g, "");
-
-  // +90 yoksa ekle
-  if (!digits.startsWith("90")) {
-    digits = "90" + digits;
-  }
-
-  // En fazla 12 hane (90 + 10 digit)
-  digits = digits.slice(0, 12);
-
-  // Format: +90 532 336 82 04
-  let formatted = "+";
-  if (digits.length > 0) formatted += digits.slice(0, 2);
-  if (digits.length > 2) formatted += " " + digits.slice(2, 5);
-  if (digits.length > 5) formatted += " " + digits.slice(5, 8);
-  if (digits.length > 8) formatted += " " + digits.slice(8, 10);
-  if (digits.length > 10) formatted += " " + digits.slice(10, 12);
-
-  return formatted;
-};
 
 
 // --------------------------- STATUS CONFIG -----------------------------
@@ -645,47 +620,11 @@ function App() {
           }
         }
       }
+  
       setAppointments((prev) => [...prev, insertedAppointment]);
       setShowAddModal(false);
       setSelectedSlot(null);
       showToast("Randevu başarıyla kaydedildi.");
-      // 6) Eğer randevuda not varsa, hasta profiline tarihli not olarak ekle
-      if (form.notes && form.notes.trim()) {
-        try {
-          // Önce mevcut profili çek
-          const { data: existingProfile } = await supabase
-            .from("patient_profiles")
-            .select("timeline_notes")
-            .eq("patient_name", trimmedName)
-            .maybeSingle();
-
-          const currentNotes = existingProfile?.timeline_notes || [];
-          
-          // Yeni notu ekle
-          const newNoteEntry = {
-            id: Date.now(),
-            date: new Date().toISOString(),
-            note: `${form.type} randevusu: ${form.notes.trim()}`,
-          };
-
-          const updatedNotes = [newNoteEntry, ...currentNotes];
-
-          // Profili güncelle veya oluştur
-          await supabase
-            .from("patient_profiles")
-            .upsert(
-              {
-                patient_name: trimmedName,
-                timeline_notes: updatedNotes,
-              },
-              { onConflict: "patient_name" }
-            );
-        } catch (noteError) {
-          console.error("Tarihli not eklenirken hata:", noteError);
-          // Not eklenemese bile randevu oluşturulmuş olur
-        }
-      }
-    
     } catch (error) {
       console.error("Randevu eklenirken hata:", error);
       const errorMessage = error?.message || error?.details || "Bilinmeyen hata";
@@ -1071,7 +1010,7 @@ function App() {
           )}
         </div>
 
-       {/* ---------------- ADD PATIENT MODAL ---------------- */}
+        {/* ---------------- ADD PATIENT MODAL ---------------- */}
         {showPatientForm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
@@ -1089,7 +1028,6 @@ function App() {
               </div>
 
               <div className="p-6 space-y-4">
-                {/* Ad Soyad */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Ad Soyad *
@@ -1103,28 +1041,23 @@ function App() {
                     className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     placeholder="Örn: Ayşe Yılmaz"
                   />
+          
                 </div>
-
-                {/* Telefon (maskeli) */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Telefon
                   </label>
                   <input
                     type="tel"
-                    value={formatPhone(patientForm.phone || "")}
+                    value={patientForm.phone}
                     onChange={(e) =>
-                      setPatientForm((prev) => ({
-                        ...prev,
-                        phone: formatPhone(e.target.value),
-                      }))
+                      setPatientForm({ ...patientForm, phone: e.target.value })
                     }
                     className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    placeholder="+90 5xx xxx xx xx"
+                    placeholder="0532 xxx xx xx"
                   />
                 </div>
 
-                {/* E-posta */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     E-posta
@@ -1140,7 +1073,6 @@ function App() {
                   />
                 </div>
 
-                {/* Doğum Tarihi */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Doğum Tarihi
@@ -1158,7 +1090,6 @@ function App() {
                   />
                 </div>
 
-                {/* Notlar */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Notlar
@@ -1174,7 +1105,6 @@ function App() {
                   />
                 </div>
 
-                {/* KVKK */}
                 <div className="pt-2">
                   <label className="inline-flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
                     <input
@@ -1190,7 +1120,9 @@ function App() {
                     />
                     <span>
                       Hastaya{" "}
-                      <span className="font-semibold">KVKK Aydınlatma Metni</span>{" "}
+                      <span className="font-semibold">
+                        KVKK Aydınlatma Metni
+                      </span>{" "}
                       sözlü/yazılı olarak iletilmiştir.
                     </span>
                   </label>
@@ -1322,7 +1254,7 @@ function DayView({
   return (
     <div className="bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col h-full">
       {/* HEADER */}
-      <div className="p-2 sm:p-3 border-t-2 border-t-gray-200 border-b border-gray-100 bg-gradient-to-r from-pink-50 to-purple-50 flex items-center justify-between">
+      <div className="p-4 sm:p-6 border-t-2 border-t-gray-200 border-b border-gray-100 bg-gradient-to-r from-pink-50 to-purple-50 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Calendar className="w-5 h-5 text-pink-600" />
           <div>
@@ -1536,7 +1468,7 @@ function WeekView({
     <div className="bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col h-full">
       {/* HEADER */}
       <div className="flex border-t-2 border-t-gray-200 border-b border-gray-100 bg-gradient-to-r from-pink-50 to-purple-50">
-        <div className="w-16 border-r px-8 py-6 text-sm font-semibold text-gray-700">
+        <div className="w-16 border-r px-2 py-3 text-xs font-semibold text-gray-500">
           Saat
         </div>
         {weekDays.map((day) => (
@@ -1856,6 +1788,7 @@ function PatientsView({
 // =========================== ADD APPOINTMENT MODAL =========================== //
 
 function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
+  // 07:00–23:00 arası 30 dk'lık seçenekler (başlangıç/bitiş için)
   const buildTimeOptions = () => {
     const opts = [];
     const startMinutes = 7 * 60;
@@ -1881,6 +1814,7 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
     return `${h}:${m}`;
   };
 
+  // Slot’tan gelen tarih & saat
   const defaultDate =
     selectedSlot?.date ? new Date(selectedSlot.date) : new Date();
 
@@ -1895,22 +1829,26 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
     return minutesToTime(base);
   })();
 
+  // -------------------- FORM STATE -------------------- //
+
   const [startTime, setStartTime] = React.useState(defaultStartTime);
   const [endTime, setEndTime] = React.useState(defaultEndTime);
 
   const [form, setForm] = React.useState({
-    title: selectedSlot?.title || "",
+    title: selectedSlot?.title || "",              // Randevu Adı
     isPatientAppointment:
-      selectedSlot?.isPatientAppointment ?? true,
+      selectedSlot?.isPatientAppointment ?? true,  // varsayılan: hasta randevusu
     patientName: selectedSlot?.patientName || "",
     phone: selectedSlot?.phone || "",
     type: selectedSlot?.type || "Kontrol",
     notes: selectedSlot?.notes || "",
   });
 
+  // Hasta arama önerileri
   const [showSuggestions, setShowSuggestions] = React.useState(false);
   const [matchingPatients, setMatchingPatients] = React.useState([]);
 
+  // Hasta adı değiştikçe mevcut hastalar içinde ara
   React.useEffect(() => {
     if (!form.isPatientAppointment) {
       setMatchingPatients([]);
@@ -1940,6 +1878,8 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
     }));
   };
 
+  // -------------------- KAYDET -------------------- //
+
   const handleSubmit = () => {
     const startMin = timeToMinutes(startTime);
     const endMin = timeToMinutes(endTime);
@@ -1953,9 +1893,10 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
 
     onSave({
       ...form,
+      // hasta randevusu değilse hasta bilgilerini null/boş gönder
       patientName: form.isPatientAppointment ? form.patientName : null,
       phone: form.isPatientAppointment ? form.phone : null,
-      date: defaultDate.toISOString().slice(0, 10),
+      date: defaultDate.toISOString().slice(0, 10), // YYYY-MM-DD
       time: startTime,
       duration,
     });
@@ -1968,30 +1909,35 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
     year: "numeric",
   });
 
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 border-b flex items-center justify-between bg-gradient-to-r from-pink-50 to-purple-50">
-          <h2 className="text-lg font-bold text-gray-800">Yeni Randevu</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 text-sm"
-          >
-            Kapat
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="p-6 space-y-5 overflow-auto">
-          {/* Tarih + Saat */}
-          <div className="space-y-2">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Tarih ve Saat
+  // -------------------- UI -------------------- //
+    return (
+      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+          
+          {/* Header */}
+          <div className="px-6 py-4 border-b flex items-center justify-between bg-gradient-to-r from-pink-50 to-purple-50">
+            <h2 className="text-lg font-bold text-gray-800">Yeni Randevu</h2>
+            <button
+              onClick={onClose}
+              className="text-gray-500 hover:text-gray-700 text-sm"
+            >
+              Kapat
+            </button>
+          </div>
+  
+          {/* Body */}
+          <div className="p-6 space-y-5 overflow-auto">
+            {/* Tarih + Saat Seçimi */}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Tarih ve Saat
+              </div>
             </div>
+  
             <div className="text-sm text-gray-700 mb-2">{dateLabel}</div>
-
+  
             <div className="grid grid-cols-2 gap-4">
+              {/* Başlangıç */}
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-500">Başlangıç Saati</label>
                 <select
@@ -2000,6 +1946,7 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
                   onChange={(e) => {
                     const newStart = e.target.value;
                     setStartTime(newStart);
+  
                     const newStartMin = timeToMinutes(newStart);
                     const endMin = timeToMinutes(endTime);
                     if (endMin <= newStartMin) {
@@ -2014,7 +1961,8 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
                   ))}
                 </select>
               </div>
-
+  
+              {/* Bitiş */}
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-500">Bitiş Saati</label>
                 <select
@@ -2030,165 +1978,26 @@ function AddAppointmentModal({ selectedSlot, onClose, onSave, patients = [] }) {
                 </select>
               </div>
             </div>
-          </div>
-
-          {/* Randevu Adı */}
-          <div className="space-y-1">
-            <label className="text-xs text-gray-500">Randevu Adı</label>
-            <input
-              type="text"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
-              value={form.title}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, title: e.target.value }))
-              }
-            />
-          </div>
-
-          {/* Hasta randevusu checkbox */}
-          <div className="flex items-center gap-2 mt-2">
-            <input
-              id="isPatient"
-              type="checkbox"
-              checked={form.isPatientAppointment}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  isPatientAppointment: e.target.checked,
-                }))
-              }
-            />
-            <label
-              htmlFor="isPatient"
-              className="text-xs text-gray-600 select-none"
-            >
-              Bu bir hasta randevusu
-            </label>
-          </div>
-
-          {/* Hasta bilgileri */}
-          {form.isPatientAppointment && (
-            <>
-              <div className="space-y-1 relative">
-                <label className="text-xs text-gray-500">Hasta Adı</label>
+  
+            {/* Randevu Adı (sadece hasta randevusu değilse) */}
+            {!form.isPatientAppointment && (
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500">Randevu Adı</label>
                 <input
                   type="text"
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
-                  value={form.patientName || ""}
+                  value={form.title}
                   onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      patientName: e.target.value,
-                    }))
+                    setForm((prev) => ({ ...prev, title: e.target.value }))
                   }
-                  onFocus={() => {
-                    if (matchingPatients.length > 0) {
-                      setShowSuggestions(true);
-                    }
-                  }}
-                  onBlur={() => {
-                    setTimeout(() => setShowSuggestions(false), 150);
-                  }}
                 />
-
-                {showSuggestions &&
-                  matchingPatients &&
-                  matchingPatients.length > 0 && (
-                    <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      {matchingPatients.map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            setForm((prev) => ({
-                              ...prev,
-                              patientName: p.name,
-                              phone: p.phone || "",
-                            }));
-                            setShowSuggestions(false);
-                          }}
-                          className="w-full text-left px-4 py-2 hover:bg-pink-50 flex flex-col"
-                        >
-                          <span className="font-medium text-gray-800">
-                            {p.name}
-                          </span>
-                          {p.phone && (
-                            <span className="text-xs text-gray-500">
-                              {p.phone}
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
               </div>
-
-              <div className="space-y-1">
-                <label className="text-xs text-gray-500">Telefon</label>
-                    <input
-                    type="tel"
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
-                    value={formatPhone(form.phone || "")}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        phone: formatPhone(e.target.value),
-                      }))
-                    }
-                  />
-              </div>
-            </>
-          )}
-
-          {/* Tür */}
-          <div className="space-y-1">
-            <label className="text-xs text-gray-500">Randevu Türü</label>
-            <select
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
-              value={form.type}
-              onChange={(e) => handleChangeType(e.target.value)}
-            >
-              <option value="Kontrol">Kontrol</option>
-              <option value="İlk Muayene">İlk Muayene</option>
-              <option value="USG">USG</option>
-              <option value="Prosedür">Prosedür</option>
-            </select>
-          </div>
-
-          {/* Notlar */}
-          <div className="space-y-1">
-            <label className="text-xs text-gray-500">Notlar</label>
-            <textarea
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 resize-none"
-              rows={3}
-              value={form.notes || ""}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, notes: e.target.value }))
-              }
-            />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t flex justify-end gap-3 bg-gray-50">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100"
-          >
-            İptal
-          </button>
-          <button
-            onClick={handleSubmit}
-            className="px-4 py-2 text-sm rounded-lg bg-pink-500 text-white hover:bg-pink-600"
-          >
-            Randevuyu Kaydet
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+            )}
+        </div> {/* Body kapanış */}
+        </div>   {/* Modal kutusu kapanış */}
+      </div>     {/* Overlay kapanış */}
+    );
+  }
 
 /* ----------------------------- ADD APPOINTMENT MODAL ----------------------------- */
 
@@ -2209,16 +2018,13 @@ function PatientHistoryModal({
     phone: "",
     diagnosis: "",
     notes: "",
-    timeline_notes: [],
     kvkk_approved: patient?.kvkk_approved ?? false,
     kvkk_approved_at: patient?.kvkk_approved_at ?? null,
   });
 
-  const [newNote, setNewNote] = useState("");
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [saving, setSaving] = useState(false);
   const hasLoadedRef = useRef(false);
-  
 
   useEffect(() => {
     // Reset the loaded flag when selectedPatient changes
@@ -2253,7 +2059,6 @@ function PatientHistoryModal({
           phone: data?.phone ?? lastPhone,
           diagnosis: data?.diagnosis ?? "",
           notes: data?.notes ?? "",
-          timeline_notes: data?.timeline_notes ?? [],
           kvkk_approved: patient?.kvkk_approved ?? false,
           kvkk_approved_at: patient?.kvkk_approved_at ?? null,
         });
@@ -2282,7 +2087,6 @@ function PatientHistoryModal({
         phone: profile.phone || null,
         diagnosis: profile.diagnosis || null,
         notes: profile.notes || null,
-        timeline_notes: profile.timeline_notes || [],
       };
 
       const { error } = await supabase
@@ -2437,16 +2241,16 @@ function PatientHistoryModal({
                 </label>
                 <input
                   type="tel"
-                  value={formatPhone(profile.phone)}
+                  value={profile.phone}
                   onChange={(e) =>
                     setProfile((prev) => ({
                       ...prev,
-                      phone: formatPhone(e.target.value),
+                      phone: e.target.value,
                     }))
                   }
-                  className="w-full px-3 py-2 border border-pink-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+                  className="w-full px-3 py-2 border border-pink-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-transparent"
+                  placeholder="0532 xxx xx xx"
                 />
-
               </div>
 
               {/* Tanı / Özet */}
@@ -2471,17 +2275,17 @@ function PatientHistoryModal({
 
             {/* Uzun not alanı */}
             <div className="mt-4">
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-                Genel Klinik Öykü (Sürekli Bilgiler)
-            </label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Doktor Notları / Klinik Öykü
+              </label>
               <textarea
-                rows={2}
+                rows={3}
                 value={profile.notes}
                 onChange={(e) =>
                   setProfile((prev) => ({ ...prev, notes: e.target.value }))
                 }
                 className="w-full px-3 py-2 border border-pink-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-transparent resize-none"
-                placeholder="Alerjiler, kronik hastalıklar, geçmiş operasyonlar, gebelik süreci..."
+                placeholder="Önemli öykü, alerjiler, cerrahi geçmiş, gebelik süreci, vs..."
               />
               {loadingProfile && (
                 <div className="text-xs text-gray-400 mt-1">
@@ -2542,130 +2346,7 @@ function PatientHistoryModal({
               )}
             </label>
           </div>
-          {/* 📌 Tarihli Klinik Notlar Bölümü */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-5 mt-6">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-                <FileText className="w-5 h-5 text-white" />
-              </div>
-              <label className="text-base font-bold text-gray-800">
-                📋 Tarihli Muayene Notları
-              </label>
-            </div>
 
-            {/* Yeni Not Ekle */}
-            <div className="mb-4 bg-white rounded-lg border-2 border-blue-300 p-4 shadow-sm">
-              <label className="block text-xs font-semibold text-gray-700 mb-2">
-                ✏️ Yeni Not Ekle
-              </label>
-
-              <textarea
-                rows={3}
-                value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none"
-                placeholder="Bugünkü muayene notunu buraya yazın..."
-              />
-
-              <div className="flex justify-between items-center mt-3">
-                <span className="text-xs text-gray-500">
-                  📅 {new Date().toLocaleDateString("tr-TR", {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-
-                <button
-                  onClick={() => {
-                    if (!newNote.trim()) return;
-
-                    const noteEntry = {
-                      id: Date.now(),
-                      date: new Date().toISOString(),
-                      note: newNote.trim(),
-                    };
-
-                    setProfile((prev) => ({
-                      ...prev,
-                      timeline_notes: [
-                        noteEntry,
-                        ...(prev.timeline_notes || []),
-                      ],
-                    }));
-
-                    setNewNote("");
-                  }}
-                  disabled={!newNote.trim()}
-                  className="px-5 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed shadow-md transition-all"
-                >
-                  💾 Not Ekle
-                </button>
-              </div>
-            </div>
-
-            {/* Mevcut Notlar */}
-            {profile.timeline_notes && profile.timeline_notes.length > 0 ? (
-              <div className="space-y-3">
-                <div className="text-xs font-semibold text-gray-600 mb-2">
-                  📚 Geçmiş Notlar ({profile.timeline_notes.length})
-                </div>
-
-                <div className="space-y-2 max-h-80 overflow-y-auto pr-2">
-                  {profile.timeline_notes.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="bg-white rounded-lg p-4 border-l-4 border-blue-400 shadow-sm hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex justify-between items-start gap-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Calendar className="w-4 h-4 text-blue-600" />
-                            <div className="text-xs text-blue-700 font-semibold">
-                              {new Date(entry.date).toLocaleDateString("tr-TR", {
-                                day: "numeric",
-                                month: "long",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </div>
-                          </div>
-                          <div className="text-sm text-gray-800 leading-relaxed">
-                            {entry.note}
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => {
-                            setProfile((prev) => ({
-                              ...prev,
-                              timeline_notes: prev.timeline_notes.filter(
-                                (n) => n.id !== entry.id
-                              ),
-                            }));
-                          }}
-                          className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-all"
-                          title="Notu Sil"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-400">
-                <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p className="text-sm font-medium">Henüz tarihli not eklenmemiş</p>
-                <p className="text-xs mt-1">İlk muayene notunu yukarıdan ekleyebilirsiniz</p>
-              </div>
-            )}
-          </div>
-    
           {/* RANDEVU GEÇMİŞİ LİSTESİ */}
           <div className="space-y-4">
             {history.map((apt) => (
