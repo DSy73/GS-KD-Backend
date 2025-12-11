@@ -874,7 +874,7 @@ function App() {
       )}
 
       <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
-      /* ---------------- RESPONSIVE HEADER ---------------- */
+      {/* ---------------- RESPONSIVE HEADER ---------------- */}
       <div className="bg-[#fff5f7] border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
           {/* Mobile Layout (< 768px) */}
@@ -986,120 +986,156 @@ function App() {
       </div>
 
         {/* ---------------- CONTROLS + VIEW SWITCH ---------------- */}
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="bg-white rounded-2xl shadow-lg p-5 mb-6">
-            <div className="flex justify-between items-center">
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setView("day")}
-                  className={`px-5 py-2.5 rounded-xl font-medium transition-all ${
-                    view === "day"
-                      ? "bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-lg"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  <Calendar className="w-4 h-4 inline mr-2" />
-                  Günlük
-                </button>
-                <button
-                  onClick={() => setView("week")}
-                  className={`px-5 py-2.5 rounded-xl font-medium transition-all ${
-                    view === "week"
-                      ? "bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-lg"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  <Calendar className="w-4 h-4 inline mr-2" />
-                  Haftalık
-                </button>
-                <button
-                  onClick={() => setView("patients")}
-                  className={`px-5 py-2.5 rounded-xl font-medium transition-all ${
-                    view === "patients"
-                      ? "bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-lg"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  <Users className="w-4 h-4 inline mr-2" />
-                  Hastalar
-                </button>
-              </div>
-
-              {view !== "patients" && (
-                <>
-                  <div className="flex items-center gap-4 mt-0 -mb-1">
-                    <button
-                      onClick={() => changeDate(view === "day" ? -1 : -7)}
-                      className="p-2.5 hover:bg-gray-100 rounded-xl transition-all"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <div className="text-center min-w-[300px]">
-                      <div className="font-bold text-gray-800 text-lg">
-                        {view === "day"
-                          ? formatDate(currentDate)
-                          : (() => {
-                              const start = weekDates[0];
-                              const end = weekDates[weekDates.length - 1];
-                              const options = {
-                                day: "numeric",
-                                month: "long",
-                                year: "numeric",
-                              };
-                              return (
-                                start.toLocaleDateString("tr-TR", options) +
-                                " - " +
-                                end.toLocaleDateString("tr-TR", options)
-                              );
-                            })()}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => changeDate(view === "day" ? 1 : 7)}
-                      className="p-2.5 hover:bg-gray-100 rounded-xl transition-all"
-                    >
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  <button
-                    onClick={() => setCurrentDate(new Date())}
-                    className="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 font-medium shadow-lg transition-all"
-                  >
-                    Bugün
-                  </button>
-                </>
-              )}
+       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+          <div className="bg-white rounded-2xl shadow-lg p-3 sm:p-5 mb-4 sm:mb-6">
+            {/* View Buttons - Üstte */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setView("day")}
+                className={`flex-1 sm:flex-initial sm:px-5 py-2 sm:py-2.5 rounded-xl font-medium transition-all text-xs sm:text-base ${
+                  view === "day"
+                    ? "bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-lg"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                <Calendar className="w-4 h-4 inline mr-1 sm:mr-2" />
+                Günlük
+              </button>
+              <button
+                onClick={() => setView("week")}
+                className={`flex-1 sm:flex-initial sm:px-5 py-2 sm:py-2.5 rounded-xl font-medium transition-all text-xs sm:text-base ${
+                  view === "week"
+                    ? "bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-lg"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                <Calendar className="w-4 h-4 inline mr-1 sm:mr-2" />
+                Haftalık
+              </button>
+              <button
+                onClick={() => setView("patients")}
+                className={`flex-1 sm:flex-initial sm:px-5 py-2 sm:py-2.5 rounded-xl font-medium transition-all text-xs sm:text-base ${
+                  view === "patients"
+                    ? "bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-lg"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                <Users className="w-4 h-4 inline mr-1 sm:mr-2" />
+                Hastalar
+              </button>
             </div>
           </div>
 
-          {/* ---------------- MAIN VIEWS ---------------- */}
-          {view === "day" && (
-            <DayView
-              workingHours={workingHours}
-              appointments={todaysAppointments}
-              currentDate={currentDate}
-              openAddModal={openAddModal}
-              getTypeIcon={getTypeIcon}
-              handleUpdateStatus={handleUpdateStatus}
-              openPatientHistory={(name) => {
-                setSelectedPatient(name);
-                setShowPatientHistory(true);
-              }}
-              onDeleteAppointment={handleDeleteAppointment}  
-            />
+          {/* Date Navigation - Günlük Takvim kartının içinde */}
+          {view !== "patients" && (
+            <div className="bg-white rounded-2xl shadow-lg mb-4 sm:mb-6">
+              {/* Header */}
+              <div className="p-3 sm:p-4 border-b border-gray-100 bg-gradient-to-r from-pink-50 to-purple-50 rounded-t-2xl">
+                <div className="flex items-center gap-2 mb-3">
+                  <Calendar className="w-5 h-5 text-pink-600" />
+                  <h3 className="text-base sm:text-lg font-bold text-gray-800">
+                    {view === "day" ? "Günlük Takvim" : "Haftalık Takvim"}
+                  </h3>
+                </div>
+
+                {/* Tarih Navigasyonu */}
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    onClick={() => changeDate(view === "day" ? -1 : -7)}
+                    className="p-2 hover:bg-white/50 rounded-xl transition-all flex-shrink-0"
+                  >
+                    <ChevronLeft className="w-5 h-5 text-gray-700" />
+                  </button>
+                  
+                  <div className="text-center flex-1 min-w-0">
+                    <div className="font-semibold text-gray-700 text-xs sm:text-sm truncate">
+                      {view === "day"
+                        ? formatDate(currentDate)
+                        : (() => {
+                            const start = weekDates[0];
+                            const end = weekDates[weekDates.length - 1];
+                            return (
+                              <>
+                                <span className="hidden sm:inline">
+                                  {start.toLocaleDateString("tr-TR", {
+                                    day: "numeric",
+                                    month: "long",
+                                    year: "numeric",
+                                  })}
+                                  {" - "}
+                                  {end.toLocaleDateString("tr-TR", {
+                                    day: "numeric",
+                                    month: "long",
+                                    year: "numeric",
+                                  })}
+                                </span>
+                                <span className="sm:hidden">
+                                  {start.toLocaleDateString("tr-TR", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                  })}
+                                  {" - "}
+                                  {end.toLocaleDateString("tr-TR", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "numeric",
+                                  })}
+                                </span>
+                              </>
+                            );
+                          })()}
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={() => changeDate(view === "day" ? 1 : 7)}
+                    className="p-2 hover:bg-white/50 rounded-xl transition-all flex-shrink-0"
+                  >
+                    <ChevronRight className="w-5 h-5 text-gray-700" />
+                  </button>
+                </div>
+
+                {/* Bugün Butonu */}
+                <button
+                  onClick={() => setCurrentDate(new Date())}
+                  className="w-full mt-3 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 font-medium shadow-lg transition-all text-xs sm:text-sm"
+                >
+                  Bugün
+                </button>
+              </div>
+
+              {/* Body - Takvim içeriği buraya gelecek */}
+              <div className="p-3 sm:p-4">
+                {view === "day" && (
+                  <DayView
+                    workingHours={workingHours}
+                    appointments={getTodayAppointments(currentDate)}
+                    currentDate={currentDate}
+                    openAddModal={openAddModal}
+                    getTypeIcon={getTypeIcon}
+                    handleUpdateStatus={handleUpdateStatus}
+                    openPatientHistory={(name) => {
+                      setSelectedPatient(name);
+                      setShowPatientHistory(true);
+                    }}
+                    onDeleteAppointment={handleDeleteAppointment}
+                  />
+                )}
+
+                {view === "week" && (
+                  <WeekView
+                    currentDate={currentDate}
+                    appointments={appointments}
+                    openAddModal={openAddModal}
+                    getTypeIcon={getTypeIcon}
+                    onDeleteAppointment={handleDeleteAppointment}
+                  />
+                )}
+              </div>
+            </div>
           )}
 
-          {view === "week" && (
-            <WeekView
-              currentDate={currentDate}
-              appointments={appointments}
-              openAddModal={openAddModal}
-              getTypeIcon={getTypeIcon}
-              onDeleteAppointment={handleDeleteAppointment}
-            />
-          )}                                
-
+          {/* Hastalar View */}
           {view === "patients" && (
             <PatientsView
               patients={patientsWithStats}
@@ -1110,12 +1146,12 @@ function App() {
                 setShowPatientHistory(true);
               }}
               onAddPatient={() => setShowPatientForm(true)}
-              onDeletePatient={handleDeletePatient}  
+              onDeletePatient={handleDeletePatient}
             />
           )}
-        </div>
+          </div>
 
-       {/* ---------------- ADD PATIENT MODAL ---------------- */}
+        {/* ---------------- ADD PATIENT MODAL ---------------- */}
         {showPatientForm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
@@ -1307,7 +1343,7 @@ function App() {
       </div>
     </>
   );
-  }
+}
 
 // =========================== DAY VIEW (OUTLOOK, 1 SAAT SLOT) =========================== //
 
