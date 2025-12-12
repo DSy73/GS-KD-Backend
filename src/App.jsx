@@ -72,7 +72,7 @@ const formatPhone = (value) => {
 };
 
 // --------------------------- STATUS CONFIG -----------------------------
-
+// dummy redeploy for SSL refresh
 const STATUS_OPTIONS = [
   { value: "planned", label: "Beklemede" },
   { value: "completed", label: "Tamamlandı" },
