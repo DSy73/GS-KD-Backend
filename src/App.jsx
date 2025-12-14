@@ -832,12 +832,12 @@ try {
         
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
           <div className="bg-white rounded-2xl shadow-lg p-3 sm:p-5 mb-4 sm:mb-6">
-            <div className="flex gap-2 flex-wrap items-center justify-between">
+          <div className="flex gap-2 flex-wrap items-center justify-between">
               {/* Sol taraf - View butonları */}
               <div className="flex gap-2">
               <button
                 onClick={() => setView("day")}
-                className={`flex-1 sm:flex-initial sm:px-5 py-2 sm:py-2.5 rounded-xl font-medium transition-all text-xs sm:text-base flex flex-col sm:flex-row items-center gap-1 sm:gap-2 ${
+                className={`flex-1 sm:flex-initial sm:px-5 py-2 sm:py-2.5 rounded-xl font-medium transition-all text-[10px] sm:text-base flex flex-col sm:flex-row items-center gap-1 sm:gap-2 ${
                   view === "day"
                     ? "bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-lg"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -848,7 +848,7 @@ try {
               </button>
               <button
                 onClick={() => setView("week")}
-                className={`flex-1 sm:flex-initial sm:px-5 py-2 sm:py-2.5 rounded-xl font-medium transition-all text-xs sm:text-base flex flex-col sm:flex-row items-center gap-1 sm:gap-2 ${
+                className={`flex-1 sm:flex-initial sm:px-5 py-2 sm:py-2.5 rounded-xl font-medium transition-all text-[10px] sm:text-base flex flex-col sm:flex-row items-center gap-1 sm:gap-2 ${
                   view === "week"
                     ? "bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-lg"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -859,7 +859,7 @@ try {
               </button>
               <button
                 onClick={() => setView("patients")}
-                className={`flex-1 sm:flex-initial sm:px-5 py-2 sm:py-2.5 rounded-xl font-medium transition-all text-xs sm:text-base flex flex-col sm:flex-row items-center gap-1 sm:gap-2 ${
+                className={`flex-1 sm:flex-initial sm:px-5 py-2 sm:py-2.5 rounded-xl font-medium transition-all text-[10px] sm:text-base flex flex-col sm:flex-row items-center gap-1 sm:gap-2 ${
                   view === "patients"
                     ? "bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-lg"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -871,7 +871,7 @@ try {
              
               <button
                 onClick={() => setView("all")}
-                className={`flex-1 sm:flex-initial sm:px-5 py-2 sm:py-2.5 rounded-xl font-medium transition-all text-xs sm:text-base flex flex-col sm:flex-row items-center gap-1 sm:gap-2 ${
+                className={`flex-1 sm:flex-initial sm:px-5 py-2 sm:py-2.5 rounded-xl font-medium transition-all text-[10px] sm:text-base flex flex-col sm:flex-row items-center gap-1 sm:gap-2 ${
                   view === "all"
                     ? "bg-gradient-to-r from-pink-500 to-pink-600 text-white shadow-lg"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -891,7 +891,7 @@ try {
                   });
                   setShowAddModal(true);
                 }}
-                className="px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 font-medium shadow-lg transition-all text-xs sm:text-base flex items-center gap-2"
+                className="px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 font-medium shadow-lg transition-all text-[10px] sm:text-base flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
                 <span className="hidden sm:inline">Yeni Randevu Ekle</span>
